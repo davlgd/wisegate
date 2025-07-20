@@ -1,0 +1,23 @@
+[package]
+name = "clever-gatekeeper"
+version = "0.1.0"
+edition = "2024"
+description = "A high-performance, secure reverse proxy with rate limiting and IP filtering"
+authors = ["davlgd"]
+repository = "https://github.com/davlgd/clever-gatekeeper"
+
+[dependencies]
+bytes = "1.10"
+clap = { version = "4.5", features = ["derive"] }
+http-body-util = "0.1"
+hyper = { version = "1.6", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[profile.release]
+codegen-units = 1            # Single codegen unit for max optimization
+lto = true                   # Link Time Optimization
+opt-level = "z"              # Optimize for size (use "3" for speed)
+panic = "abort"              # Smaller binary, no unwinding
+strip = true                 # Remove debug symbols

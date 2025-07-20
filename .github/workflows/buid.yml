@@ -1,0 +1,86 @@
+name: Build Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
+jobs:
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: clever-gatekeeper-linux-x64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name: clever-gatekeeper-windows-x64.exe
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: clever-gatekeeper-macos-x64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Build binary
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Prepare binary (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        strip clever-gatekeeper
+        chmod +x clever-gatekeeper
+        mv clever-gatekeeper ${{ matrix.name }}
+
+    - name: Prepare binary (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/release
+        mv clever-gatekeeper.exe ${{ matrix.name }}
+
+    - name: Upload binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.name }}
+        path: target/${{ matrix.target }}/release/${{ matrix.name }}
+
+  release:
+    name: Upload to Release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./binaries
+
+    - name: Display structure of downloaded files
+      run: ls -la ./binaries/**
+
+    - name: Upload Release Assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./binaries/**/*
+        tag_name: ${{ github.ref_name }}
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
