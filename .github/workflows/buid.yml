@@ -19,16 +19,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: clever-gatekeeper-macos-arm64
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: clever-gatekeeper-linux-x64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             name: clever-gatekeeper-windows-x64.exe
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            name: clever-gatekeeper-macos-x64
-
     steps:
     - uses: actions/checkout@v4
 
@@ -46,6 +45,12 @@ jobs:
         cd target/${{ matrix.target }}/release
         strip clever-gatekeeper
         chmod +x clever-gatekeeper
+
+        if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          sudo apt-get update && sudo apt-get install -y upx
+          upx --best --lzma clever-gatekeeper
+        fi
+
         mv clever-gatekeeper ${{ matrix.name }}
 
     - name: Prepare binary (Windows)
