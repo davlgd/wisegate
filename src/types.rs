@@ -9,5 +9,16 @@ pub struct RateLimitConfig {
     pub window_duration: Duration,
 }
 
+/// Configuration for proxy behavior and performance
+#[derive(Clone)]
+pub struct ProxyConfig {
+    /// Request timeout for upstream connections
+    pub timeout: Duration,
+    /// Maximum body size in bytes (0 = unlimited)
+    pub max_body_size: usize,
+    /// Enable streaming for large bodies
+    pub enable_streaming: bool,
+}
+
 /// Rate limiter state: tracks request counts per IP with timestamps
 pub type RateLimiter = Arc<Mutex<HashMap<String, (Instant, u32)>>>;

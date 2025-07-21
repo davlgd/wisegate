@@ -67,6 +67,9 @@ All configuration is done via environment variables:
 | `BLOCKED_IPS` | _(none)_ | Comma-separated list of blocked client IPs |
 | `RATE_LIMIT_REQUESTS` | `100` | Maximum requests per time window |
 | `RATE_LIMIT_WINDOW_SECS` | `60` | Time window in seconds for rate limiting |
+| `PROXY_TIMEOUT_SECS` | `30` | Timeout for upstream requests in seconds |
+| `MAX_BODY_SIZE_MB` | `100` | Maximum request body size in MB (0 = unlimited) |
+| `ENABLE_STREAMING` | `true` | Enable streaming mode for better memory usage |
 
 ### Complete Example
 
@@ -78,6 +81,11 @@ export BLOCKED_IPS="192.168.1.200,malicious.ip.here"
 # Rate limiting (100 requests per minute per IP)
 export RATE_LIMIT_REQUESTS=100
 export RATE_LIMIT_WINDOW_SECS=60
+
+# Proxy performance tuning
+export PROXY_TIMEOUT_SECS=30
+export MAX_BODY_SIZE_MB=100
+export ENABLE_STREAMING=true
 
 # Start proxy
 clever-gatekeeper --listen 8080 --forward 3000
@@ -119,6 +127,23 @@ x-forwarded-for: client.ip, proxy.ip, 203.0.113.1
 forwarded: for=203.0.113.1:45678;by=192.168.1.100;proto=https
 x-real-ip: 203.0.113.1
 ```
+
+## ⚡ Performance Features
+
+### Streaming Support
+- **Automatic**: Enabled by default for better memory usage
+- **Configurable**: Set `ENABLE_STREAMING=false` for legacy buffered mode
+- **Memory Efficient**: Handles large files without loading entirely into RAM
+
+### Request Timeouts
+- **Configurable**: Set custom timeouts with `PROXY_TIMEOUT_SECS`
+- **Default**: 30 seconds timeout for upstream requests
+- **Reliability**: Prevents hanging connections
+
+### Body Size Limits
+- **Flexible**: Configure maximum request body size
+- **Protection**: Prevents memory exhaustion from large uploads
+- **Streaming Mode**: More lenient limits when streaming is enabled
 
 ## 🔧 Development
 

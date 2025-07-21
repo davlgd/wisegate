@@ -16,6 +16,14 @@ pub fn print_startup_info(args: &Args) {
              rate_config.max_requests,
              rate_config.window_duration.as_secs());
 
+    let proxy_config = config::get_proxy_config();
+    println!("🔧 Proxy Configuration:");
+    println!("   Timeout:        {} seconds", proxy_config.timeout.as_secs());
+    println!("   Max Body Size:  {} MB",
+             if proxy_config.max_body_size == 0 { "unlimited".to_string() }
+             else { (proxy_config.max_body_size / 1024 / 1024).to_string() });
+    println!("   Streaming:      {}", if proxy_config.enable_streaming { "enabled" } else { "disabled" });
+
     let blocked_count = config::get_blocked_ips().len();
     if blocked_count > 0 {
         println!("🚫 IP Filtering:");

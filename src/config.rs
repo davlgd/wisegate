@@ -2,7 +2,7 @@ use std::env;
 use std::time::Duration;
 
 use crate::env_vars;
-use crate::types::RateLimitConfig;
+use crate::types::{ProxyConfig, RateLimitConfig};
 
 /// Configuration management module
 
@@ -21,6 +21,30 @@ pub fn get_rate_limit_config() -> RateLimitConfig {
     RateLimitConfig {
         max_requests,
         window_duration: Duration::from_secs(window_secs),
+    }
+}
+
+/// Get proxy configuration from environment variables
+pub fn get_proxy_config() -> ProxyConfig {
+    let timeout_secs = env::var(env_vars::PROXY_TIMEOUT_SECS)
+        .unwrap_or_else(|_| "30".to_string())
+        .parse()
+        .unwrap_or(30);
+
+    let max_body_mb = env::var(env_vars::MAX_BODY_SIZE_MB)
+        .unwrap_or_else(|_| "100".to_string())
+        .parse()
+        .unwrap_or(100);
+
+    let enable_streaming = env::var(env_vars::ENABLE_STREAMING)
+        .unwrap_or_else(|_| "true".to_string())
+        .parse()
+        .unwrap_or(true);
+
+    ProxyConfig {
+        timeout: Duration::from_secs(timeout_secs),
+        max_body_size: if max_body_mb == 0 { 0 } else { max_body_mb * 1024 * 1024 }, // Convert MB to bytes
+        enable_streaming,
     }
 }
 

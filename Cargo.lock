@@ -175,7 +175,7 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
 name = "clever-gatekeeper"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "clap",
