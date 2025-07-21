@@ -175,7 +175,39 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [Hyper](https://hyper.rs/) for HTTP handling
 - [Tokio](https://tokio.rs/) for async runtime
 - [Clap](https://clap.rs/) for CLI parsing
+- [Reqwest](https://docs.rs/reqwest/) for HTTP client functionality
 - Inspired by the need for a lightweight, simple, secure proxy
+
+## 📁 Project Structure
+
+The project follows Rust best practices with a modular architecture for maintainability and clarity:
+
+```
+src/
+├── main.rs              # Entry point and server logic
+├── args.rs              # Command line argument parsing
+├── types.rs             # Common types and type aliases
+├── env_vars.rs          # Environment variable constants
+├── config.rs            # Configuration management
+├── ip_filter.rs         # IP validation and filtering logic
+├── rate_limiter.rs      # Rate limiting implementation
+├── request_handler.rs   # HTTP request processing
+└── server.rs            # Server utilities and startup info
+```
+
+### Module Responsibilities
+
+- **`main.rs`**: Application entry point, server setup, and connection handling
+- **`args.rs`**: CLI argument definitions using Clap
+- **`types.rs`**: Shared type definitions (RateLimitConfig, RateLimiter)
+- **`env_vars.rs`**: Centralized environment variable names
+- **`config.rs`**: Environment variable parsing and configuration loading
+- **`ip_filter.rs`**: IP validation, header parsing, and blocking logic
+- **`rate_limiter.rs`**: Sliding window rate limiting implementation
+- **`request_handler.rs`**: HTTP request/response processing and forwarding
+- **`server.rs`**: Startup banner and server utility functions
+
+This modular structure ensures each component has a single responsibility, making the codebase easy to understand, test, and maintain.
 
 ---
 
