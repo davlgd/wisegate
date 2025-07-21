@@ -1,6 +1,7 @@
 use std::time::Instant;
-use crate::types::RateLimiter;
+
 use crate::config;
+use crate::types::RateLimiter;
 
 /// Rate limiting module
 

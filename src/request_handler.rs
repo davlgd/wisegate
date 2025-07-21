@@ -1,6 +1,7 @@
-use hyper::{body::Incoming, Request, Response, StatusCode};
 use http_body_util::{BodyExt, Full};
+use hyper::{body::Incoming, Request, Response, StatusCode};
 use std::convert::Infallible;
+
 use crate::types::RateLimiter;
 use crate::{ip_filter, rate_limiter};
 

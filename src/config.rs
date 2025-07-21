@@ -1,7 +1,8 @@
 use std::env;
 use std::time::Duration;
-use crate::types::RateLimitConfig;
+
 use crate::env_vars;
+use crate::types::RateLimitConfig;
 
 /// Configuration management module
 

@@ -1,20 +1,20 @@
+use clap::Parser;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use clap::Parser;
 use tokio::net::TcpListener;
 
 mod args;
-mod types;
-mod env_vars;
 mod config;
+mod env_vars;
 mod ip_filter;
 mod rate_limiter;
 mod request_handler;
 mod server;
+mod types;
 
 use args::Args;
 
