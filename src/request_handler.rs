@@ -18,15 +18,22 @@ pub async fn handle_request(
     let real_client_ip = match ip_filter::extract_and_validate_real_ip(req.headers()) {
         Some(ip) => ip,
         None => {
-            return Ok(create_error_response(
-                StatusCode::FORBIDDEN,
-                "Invalid request: missing or invalid proxy headers"
-            ));
+            // In permissive mode (no allowlist configured), we couldn't extract IP from headers
+            // Use placeholder IP and continue with non-IP-based security features only
+            if config::get_allowed_proxy_ips().is_none() {
+                "unknown".to_string()
+            } else {
+                // If allowlist is configured but validation failed, reject the request
+                return Ok(create_error_response(
+                    StatusCode::FORBIDDEN,
+                    "Invalid request: missing or invalid proxy headers"
+                ));
+            }
         }
     };
 
-    // Check if IP is blocked
-    if ip_filter::is_ip_blocked(&real_client_ip) {
+    // Check if IP is blocked (skip if IP is unknown)
+    if real_client_ip != "unknown" && ip_filter::is_ip_blocked(&real_client_ip) {
         return Ok(create_error_response(
             StatusCode::FORBIDDEN,
             "IP address is blocked"
@@ -51,20 +58,22 @@ pub async fn handle_request(
         ));
     }
 
-    // Apply rate limiting
-    if !rate_limiter::check_rate_limit(&limiter, &real_client_ip) {
+    // Apply rate limiting (skip if IP is unknown)
+    if real_client_ip != "unknown" && !rate_limiter::check_rate_limit(&limiter, &real_client_ip) {
         return Ok(create_error_response(
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded"
         ));
     }
 
-    // Add X-Real-IP header for upstream service
+    // Add X-Real-IP header for upstream service (only if we have a real IP)
     let mut req = req;
-    req.headers_mut().insert(
-        "x-real-ip",
-        real_client_ip.parse().unwrap()
-    );
+    if real_client_ip != "unknown" {
+        req.headers_mut().insert(
+            "x-real-ip",
+            real_client_ip.parse().unwrap()
+        );
+    }
 
     // Forward request with streaming support
     if proxy_config.enable_streaming {

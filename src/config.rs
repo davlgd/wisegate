@@ -48,10 +48,34 @@ pub fn get_proxy_config() -> ProxyConfig {
 }
 
 /// Get list of allowed proxy IPs from environment
+/// Uses the simplified logic from env_vars to try primary then alternative variable
 pub fn get_allowed_proxy_ips() -> Option<Vec<String>> {
-    env::var(env_vars::ALLOWED_PROXY_IPS).ok().map(|ips| {
-        ips.split(',').map(|ip| ip.trim().to_string()).collect()
-    })
+    get_allowed_proxy_ips_internal(|key| std::env::var(key))
+}
+
+/// Internal function that accepts an environment variable lookup function
+/// This allows for easier testing without modifying global environment
+fn get_allowed_proxy_ips_internal<F>(env_var: F) -> Option<Vec<String>>
+where
+    F: Fn(&str) -> Result<String, std::env::VarError>,
+{
+    // Try primary variable first
+    if let Ok(ips) = env_var(env_vars::ALLOWED_PROXY_IPS) {
+        if !ips.trim().is_empty() {
+            return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
+        }
+    }
+    
+    // Try user-defined alternative variable if set
+    if let Ok(alt_var_name) = env_var(env_vars::TRUSTED_PROXY_IPS_VAR) {
+        if let Ok(ips) = env_var(&alt_var_name) {
+            if !ips.trim().is_empty() {
+                return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
+            }
+        }
+    }
+    
+    None
 }
 
 /// Get list of blocked IPs from environment
