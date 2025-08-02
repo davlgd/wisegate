@@ -25,11 +25,13 @@ A high-performance, secure reverse proxy written in Rust with built-in rate limi
 ### Installation
 
 #### Install via Cargo (Recommended)
+
 ```bash
 cargo install wisegate
 ```
 
 #### Download Binary
+
 ```bash
 # Adapt the URL for your platform
 wget https://github.com/davlgd/wisegate/releases/latest/download/wisegate-linux-x64
@@ -38,6 +40,7 @@ sudo mv wisegate-linux-x64 /usr/local/bin/wisegate
 ```
 
 #### Build from Source
+
 ```bash
 git clone https://github.com/davlgd/wisegate.git
 cd wisegate
@@ -48,7 +51,7 @@ sudo cp target/release/wisegate /usr/local/bin/
 ### Basic Usage
 
 ```bash
-# Set allowed proxy IPs (required, native in Clever Cloud's applications)
+# Optional: Set allowed proxy IPs (enables strict IP validation)
 export CC_REVERSE_PROXY_IPS="192.168.1.100,10.0.0.1"
 
 # Start the proxy
@@ -61,11 +64,14 @@ Your service is now protected! Requests will be forwarded from port 8080 to port
 
 All configuration is done via environment variables:
 
-### Required Configuration
+### Proxy Security Configuration
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `CC_REVERSE_PROXY_IPS` | Comma-separated list of allowed proxy/load balancer IPs | `"192.168.1.1,10.0.0.1"` |
+| `CC_REVERSE_PROXY_IPS` | *(Optional)* Comma-separated list of allowed proxy/load balancer IPs. When set, enables strict header validation. | `"192.168.1.1,10.0.0.1"` |
+| `TRUSTED_PROXY_IPS_VAR` | *(Optional)* Name of alternative environment variable to use instead of `CC_REVERSE_PROXY_IPS` | `"MY_COMPANY_PROXY_IPS"` |
+
+**Note**: When neither `CC_REVERSE_PROXY_IPS` nor an alternative variable is configured, WiseGate runs in permissive mode where proxy IP validation is disabled. This allows requests without proper reverse proxy headers but maintains other security features.
 
 ### Optional Configuration
 
@@ -80,25 +86,40 @@ All configuration is done via environment variables:
 | `MAX_BODY_SIZE_MB` | `100` | Maximum request body size in MB (0 = unlimited) |
 | `ENABLE_STREAMING` | `true` | Enable streaming mode for better memory usage |
 
-### Complete Example
+### Configuration Examples
+
+#### Strict Mode
 
 ```bash
-# Security configuration
+# Proxy IP validation and full security features
 export CC_REVERSE_PROXY_IPS="192.168.1.100,10.0.0.1,172.16.0.1"
 export BLOCKED_IPS="192.168.1.200,malicious.ip.here"
 export BLOCKED_METHODS="PUT,DELETE,PATCH"
 export BLOCKED_PATTERNS=".yaml,.php,matomo"
-
-# Rate limiting (100 requests per minute per IP)
 export RATE_LIMIT_REQUESTS=100
 export RATE_LIMIT_WINDOW_SECS=60
 
-# Proxy performance tuning
-export PROXY_TIMEOUT_SECS=30
-export MAX_BODY_SIZE_MB=100
-export ENABLE_STREAMING=true
+wisegate --listen 8080 --forward 9000
+```
 
-# Start proxy
+#### Custom Alternative Variable
+
+```bash
+# Use custom environment variable name for proxy IPs
+export TRUSTED_PROXY_IPS_VAR="MY_PROXY_IPS"
+export MY_PROXY_IPS="192.168.1.100,10.0.0.1"
+export BLOCKED_METHODS="PUT,DELETE,PATCH"
+
+wisegate --listen 8080 --forward 9000
+```
+
+#### Permissive Mode (Basic Security)
+
+```bash
+# No proxy IP validation - only method and pattern filtering
+export BLOCKED_METHODS="PUT,DELETE,PATCH"
+export BLOCKED_PATTERNS=".yaml,.php,matomo"
+
 wisegate --listen 8080 --forward 9000
 ```
 
@@ -106,26 +127,44 @@ wisegate --listen 8080 --forward 9000
 
 ### Security Model
 
-1. **Header Validation**: Requires both `x-forwarded-for` and `forwarded` headers
-2. **Proxy Authentication**: Validates the proxy IP (from `by=` field) against allow list
-3. **Real IP Extraction**: Extracts actual client IP from forwarded headers
-4. **IP Filtering**: Blocks requests from blacklisted IPs
-5. **HTTP Method Filtering**: Blocks requests using blacklisted HTTP methods (returns 405)
-6. **URL Pattern Filtering**: Blocks URLs containing configured patterns (returns 404)
-7. **Rate Limiting**: Applies per-IP rate limiting with sliding windows
-8. **Header Injection**: Adds `X-Real-IP` header for upstream services
+WiseGate operates in two modes depending on configuration:
+
+**All modes provide:**
+- **HTTP Method Filtering**: Blocks requests using blacklisted HTTP methods (returns 405)
+- **URL Pattern Filtering**: Blocks URLs containing configured patterns (returns 404)
+
+#### Permissive Mode (when no proxy IPs are configured)
+
+Additionally provides:
+
+- **Best-Effort IP Extraction**: Attempts to extract client IP from available headers
+- **Limited IP Features**: IP filtering and rate limiting are disabled when client IP cannot be determined
+- **Conditional Header Injection**: Adds `X-Real-IP` header only when client IP is available
+
+#### Strict Mode (when proxy IPs are configured)
+
+Additionally provides:
+
+- **Header Validation**: Requires both `x-forwarded-for` and `forwarded` headers
+- **Proxy Authentication**: Validates the proxy IP (from `by=` field) against allow list
+- **Real IP Extraction**: Extracts actual client IP from forwarded headers
+- **IP Filtering**: Blocks requests from blacklisted IPs
+- **Rate Limiting**: Applies per-IP rate limiting with sliding windows
+- **Header Injection**: Adds `X-Real-IP` header for upstream services
 
 ### Request Flow
 
 ```
 Client → Load Balancer → WiseGate → Your Service
                                ↓
-                        ✅ Validate headers
-                        ✅ Check IP allowlist
+                        ✅ Validate headers (strict mode)
+                        ✅ Check Trusted Proxy IPs allowlist (strict mode)
                         ✅ Check HTTP methods
                         ✅ Check URL patterns
-                        ✅ Apply rate limiting
-                        ✅ Add X-Real-IP header
+                        ✅ Extract real client IP (if detected)
+                        ✅ Check IP blocklist (if IP is detected)
+                        ✅ Apply rate limiting (if IP is detected)
+                        ✅ Add X-Real-IP header (if IP is detected)
 ```
 
 ### Example Headers
@@ -194,12 +233,17 @@ cargo build --release --target x86_64-unknown-linux-musl
 # Run tests
 cargo test
 
-# Integration testing
+# Integration testing (Strict Mode)
 export CC_REVERSE_PROXY_IPS="127.0.0.1"
 ./target/release/wisegate --listen 8080 --forward 3000 &
 curl -H "x-forwarded-for: 203.0.113.1" \
      -H "forwarded: by=127.0.0.1" \
      http://localhost:8080/
+
+# Integration testing (Permissive Mode)
+unset CC_REVERSE_PROXY_IPS
+./target/release/wisegate --listen 8081 --forward 3001 &
+curl http://localhost:8081/
 ```
 
 ## 📁 Project Structure

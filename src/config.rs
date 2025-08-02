@@ -48,8 +48,9 @@ pub fn get_proxy_config() -> ProxyConfig {
 }
 
 /// Get list of allowed proxy IPs from environment
+/// Uses the simplified logic from env_vars to try primary then alternative variable
 pub fn get_allowed_proxy_ips() -> Option<Vec<String>> {
-    env::var(env_vars::ALLOWED_PROXY_IPS).ok().map(|ips| {
+    env_vars::get_proxy_ips_env().map(|ips| {
         ips.split(',').map(|ip| ip.trim().to_string()).collect()
     })
 }
