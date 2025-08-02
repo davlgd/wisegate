@@ -22,13 +22,6 @@ use args::Args;
 async fn main() {
     let args = Args::parse();
 
-    // Validate required configuration
-    if config::get_allowed_proxy_ips().is_none() {
-        eprintln!("❌ Error: {} environment variable is required", env_vars::ALLOWED_PROXY_IPS);
-        eprintln!("   Example: export {}=\"192.168.1.1,10.0.0.1\"", env_vars::ALLOWED_PROXY_IPS);
-        std::process::exit(1);
-    }
-
     server::print_startup_info(&args);
 
     // Initialize rate limiter
