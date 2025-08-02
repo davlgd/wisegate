@@ -3,6 +3,7 @@ name = "wisegate"
 version = "0.3.0"
 edition = "2024"
 description = "A high-performance, secure reverse proxy with rate limiting and IP filtering"
+license = "Apache-2.0"
 authors = ["davlgd"]
 repository = "https://github.com/davlgd/wisegate"
 
