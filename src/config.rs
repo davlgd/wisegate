@@ -107,3 +107,124 @@ pub fn get_blocked_methods() -> Vec<String> {
         .filter(|method| !method.is_empty())
         .collect()
 }
+
+#[cfg(test)]  
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    // Helper function to create a mock environment function for testing
+    fn create_mock_env(vars: HashMap<&str, &str>) -> impl Fn(&str) -> Result<String, std::env::VarError> {
+        move |key: &str| {
+            vars.get(key)
+                .map(|v| v.to_string())
+                .ok_or(std::env::VarError::NotPresent)
+        }
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_with_cc_reverse_proxy_ips() {
+        let mut env_vars = HashMap::new();
+        env_vars.insert(env_vars::ALLOWED_PROXY_IPS, "192.168.1.1,10.0.0.1");
+        let env_fn = create_mock_env(env_vars);
+        
+        let result = get_allowed_proxy_ips_internal(env_fn);
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 2);
+        assert_eq!(ips[0], "192.168.1.1");
+        assert_eq!(ips[1], "10.0.0.1");
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_with_alternative_var() {
+        let mut env_vars = HashMap::new();
+        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "MY_CUSTOM_PROXY_IPS");
+        env_vars.insert("MY_CUSTOM_PROXY_IPS", "172.16.0.1,203.0.113.1");
+        let env_fn = create_mock_env(env_vars);
+        
+        let result = get_allowed_proxy_ips_internal(env_fn);
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 2);
+        assert_eq!(ips[0], "172.16.0.1");
+        assert_eq!(ips[1], "203.0.113.1");
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_cc_takes_priority() {
+        // Both variables set - CC_REVERSE_PROXY_IPS should take priority
+        let mut env_vars = HashMap::new();
+        env_vars.insert(env_vars::ALLOWED_PROXY_IPS, "192.168.1.1");
+        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "MY_CUSTOM_PROXY_IPS");
+        env_vars.insert("MY_CUSTOM_PROXY_IPS", "172.16.0.1");
+        let env_fn = create_mock_env(env_vars);
+        
+        let result = get_allowed_proxy_ips_internal(env_fn);
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 1);
+        assert_eq!(ips[0], "192.168.1.1"); // Should use CC_REVERSE_PROXY_IPS value
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_fallback_to_alternative() {
+        // Don't set CC_REVERSE_PROXY_IPS, only alternative
+        let mut env_vars = HashMap::new();
+        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "COMPANY_PROXY_LIST");
+        env_vars.insert("COMPANY_PROXY_LIST", "10.1.1.1,10.1.1.2,10.1.1.3");
+        let env_fn = create_mock_env(env_vars);
+        
+        let result = get_allowed_proxy_ips_internal(env_fn);
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 3);
+        assert_eq!(ips[0], "10.1.1.1");
+        assert_eq!(ips[1], "10.1.1.2");
+        assert_eq!(ips[2], "10.1.1.3");
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_none_when_no_vars() {
+        // No relevant env vars set
+        let env_vars = HashMap::new();
+        let env_fn = create_mock_env(env_vars);
+        
+        let result = get_allowed_proxy_ips_internal(env_fn);
+        
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_handles_whitespace() {
+        // Test with whitespace around IPs
+        let mut env_vars = HashMap::new();
+        env_vars.insert(env_vars::ALLOWED_PROXY_IPS, " 192.168.1.1 , 10.0.0.1 ");
+        let env_fn = create_mock_env(env_vars);
+        
+        let result = get_allowed_proxy_ips_internal(env_fn);
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 2);
+        assert_eq!(ips[0], "192.168.1.1");
+        assert_eq!(ips[1], "10.0.0.1");
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_ignores_empty_alternative_var() {
+        // Set alternative var but with empty value
+        let mut env_vars = HashMap::new();
+        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "EMPTY_PROXY_VAR");
+        env_vars.insert("EMPTY_PROXY_VAR", "");
+        let env_fn = create_mock_env(env_vars);
+        
+        let result = get_allowed_proxy_ips_internal(env_fn);
+        
+        assert!(result.is_none());
+    }
+}
