@@ -174,19 +174,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
-name = "clever-gatekeeper"
-version = "0.3.0"
-dependencies = [
- "bytes",
- "clap",
- "http-body-util",
- "hyper",
- "hyper-util",
- "reqwest",
- "tokio",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1529,6 +1516,19 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "wisegate"
+version = "0.3.0"
+dependencies = [
+ "bytes",
+ "clap",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "reqwest",
+ "tokio",
+]
 
 [[package]]
 name = "wit-bindgen-rt"

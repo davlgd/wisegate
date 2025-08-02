@@ -1,6 +1,6 @@
 use clap::Parser;
 
-/// Command line arguments for Clever GateKeeper
+/// Command line arguments for WiseGate
 #[derive(Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(about = env!("CARGO_PKG_DESCRIPTION"))]
