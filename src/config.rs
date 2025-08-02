@@ -74,3 +74,13 @@ pub fn get_blocked_patterns() -> Vec<String> {
         .filter(|pattern| !pattern.is_empty())
         .collect()
 }
+
+/// Get list of blocked HTTP methods from environment
+pub fn get_blocked_methods() -> Vec<String> {
+    env::var(env_vars::BLOCKED_METHODS)
+        .unwrap_or_default()
+        .split(',')
+        .map(|method| method.trim().to_uppercase())
+        .filter(|method| !method.is_empty())
+        .collect()
+}

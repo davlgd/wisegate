@@ -1,5 +1,6 @@
 pub const ALLOWED_PROXY_IPS: &str = "CC_REVERSE_PROXY_IPS";
 pub const BLOCKED_IPS: &str = "BLOCKED_IPS";
+pub const BLOCKED_METHODS: &str = "BLOCKED_METHODS";
 pub const BLOCKED_PATTERNS: &str = "BLOCKED_PATTERNS";
 pub const ENABLE_STREAMING: &str = "ENABLE_STREAMING";
 pub const MAX_BODY_SIZE_MB: &str = "MAX_BODY_SIZE_MB";
