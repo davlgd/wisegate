@@ -6,6 +6,14 @@ description = "A high-performance, secure reverse proxy with rate limiting and I
 license = "Apache-2.0"
 authors = ["davlgd"]
 repository = "https://github.com/davlgd/wisegate"
+exclude = [
+    ".github/",
+    "target/",
+    ".gitignore",
+    "Cargo.lock",
+    "LICENSE",
+    "README.md",
+]
 
 [dependencies]
 bytes = "1.10"
