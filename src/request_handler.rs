@@ -205,7 +205,7 @@ async fn forward_with_reqwest(
                 Ok(body_bytes) => {
                     let mut hyper_response = Response::builder()
                         .status(status.as_u16())
-                        .body(Full::new(bytes::Bytes::from(body_bytes)))
+                        .body(Full::new(body_bytes))
                         .unwrap();
 
                     // Copy headers

@@ -44,7 +44,7 @@ fn extract_client_ip_from_xff(xff: &str) -> Option<String> {
     xff.split(',')
         .map(|ip| ip.trim())
         .filter(|ip| is_valid_ip_format(ip))
-        .last()
+        .next_back()
         .map(|ip| ip.to_string())
 }
 

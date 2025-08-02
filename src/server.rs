@@ -27,7 +27,7 @@ pub fn print_startup_info(args: &Args) {
     let blocked_count = config::get_blocked_ips().len();
     if blocked_count > 0 {
         println!("🚫 IP Filtering:");
-        println!("   Blocked IPs:    {} configured", blocked_count);
+        println!("   Blocked IPs:    {blocked_count} configured");
     }
 
     println!();

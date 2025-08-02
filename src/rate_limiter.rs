@@ -4,7 +4,6 @@ use crate::config;
 use crate::types::RateLimiter;
 
 /// Rate limiting module
-
 /// Check if a request from the given IP should be rate limited
 ///
 /// Uses a sliding window approach:
