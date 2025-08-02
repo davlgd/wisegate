@@ -4,21 +4,21 @@ A high-performance, secure reverse proxy written in Rust with built-in rate limi
 
 ## ✨ Features
 
-- **🚀 Ultra-Fast**: ~3MB binary (550 KB after upx), ~2MB RAM usage
+- **🚀 Ultra-Fast**: ~2MB binary (1 MB after upx)
 - **🔒 Secure**: Validates load balancer headers and enforces proxy IP allowlists
 - **📊 Rate Limiting**: Per-IP rate limiting with configurable sliding windows
 - **🚫 IP Filtering**: Block malicious IPs with environment-based configuration
 - **🚫 HTTP Method Filtering**: Block specific HTTP methods (GET, POST, PUT, etc.)
-- **🛡️ URL Pattern Blocking**: Block requests containing specific patterns (e.g., `.php`, `.yaml`)
+- **🛡️ URL Pattern Blocking**: Block requests containing specific patterns (e.g., `.ext`, `/path/to/block`)
 - **🌐 Real IP Extraction**: Correctly extracts client IPs from `x-forwarded-for` and `forwarded` headers
 - **⚙️ Zero Dependencies**: Statically compiled binary with no external runtime requirements
 
 ## 🎯 Use Cases
 
-- **Load Balancer Backend**: Perfect for services behind a load balancers like Clever Cloud's [Sōzu](https://sozu.io)
 - **API Gateway**: Rate limiting and IP filtering for REST APIs
-- **Microservices Security**: Add security layer to existing services without code changes
 - **DDoS Protection**: Basic protection against IP-based attacks
+- **Microservices Security**: Add security layer to existing services without code changes
+- **Load Balancer Backend**: Perfect for services behind a load balancers like Clever Cloud's [Sōzu](https://sozu.io)
 
 ## 🚀 Quick Start
 
@@ -31,7 +31,7 @@ cargo install wisegate
 
 #### Download Binary
 ```bash
-# Download latest release
+# Adapt the URL for your platform
 wget https://github.com/davlgd/wisegate/releases/latest/download/wisegate-linux-x64
 chmod +x wisegate-linux-x64
 sudo mv wisegate-linux-x64 /usr/local/bin/wisegate
@@ -55,9 +55,9 @@ export CC_REVERSE_PROXY_IPS="192.168.1.100,10.0.0.1"
 wisegate --listen 8080 --forward 9000
 ```
 
-Your service is now protected! Requests will be forwarded from port 8080 to port 3000 with added security.
+Your service is now protected! Requests will be forwarded from port 8080 to port 9000 with added security.
 
-## ⚙️  Configuration
+## ⚙️ Configuration
 
 All configuration is done via environment variables:
 
@@ -99,7 +99,7 @@ export MAX_BODY_SIZE_MB=100
 export ENABLE_STREAMING=true
 
 # Start proxy
-wisegate --listen 8080 --forward 3000
+wisegate --listen 8080 --forward 9000
 ```
 
 ## 🔍 How It Works
@@ -107,7 +107,7 @@ wisegate --listen 8080 --forward 3000
 ### Security Model
 
 1. **Header Validation**: Requires both `x-forwarded-for` and `forwarded` headers
-2. **Proxy Authentication**: Validates the proxy IP (from `by=` field) against allowlist
+2. **Proxy Authentication**: Validates the proxy IP (from `by=` field) against allow list
 3. **Real IP Extraction**: Extracts actual client IP from forwarded headers
 4. **IP Filtering**: Blocks requests from blacklisted IPs
 5. **HTTP Method Filtering**: Blocks requests using blacklisted HTTP methods (returns 405)
@@ -160,7 +160,20 @@ x-real-ip: 203.0.113.1
 - **Protection**: Prevents memory exhaustion from large uploads
 - **Streaming Mode**: More lenient limits when streaming is enabled
 
-## 🔧 Development
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+
+- **Issues**: [GitHub Issues](https://github.com/davlgd/wisegate/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/davlgd/wisegate/discussions)
+
+### Development Setup
+
+1. Install Rust
+2. Clone the repository
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
 
 ### Building
 
@@ -188,35 +201,6 @@ curl -H "x-forwarded-for: 203.0.113.1" \
      -H "forwarded: by=127.0.0.1" \
      http://localhost:8080/
 ```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-1. Install Rust
-2. Clone the repository
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
-
-## 📝 License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Issues**: [GitHub Issues](https://github.com/davlgd/wisegate/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/davlgd/wisegate/discussions)
-
-## 🏆 Acknowledgments
-
-- Built with [Hyper](https://hyper.rs/) for HTTP handling
-- [Tokio](https://tokio.rs/) for async runtime
-- [Clap](https://clap.rs/) for CLI parsing
-- [Reqwest](https://docs.rs/reqwest/) for HTTP client functionality
-- Inspired by the need for a lightweight, simple, secure proxy
 
 ## 📁 Project Structure
 
@@ -248,6 +232,18 @@ src/
 - **`server.rs`**: Startup banner and server utility functions
 
 This modular structure ensures each component has a single responsibility, making the codebase easy to understand, test, and maintain.
+
+## 📝 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## 🏆 Acknowledgments
+
+- Built with [Hyper](https://hyper.rs/) for HTTP handling
+- [Tokio](https://tokio.rs/) for async runtime
+- [Clap](https://clap.rs/) for CLI parsing
+- [Reqwest](https://docs.rs/reqwest/) for HTTP client functionality
+- Inspired by the need for a lightweight, simple, secure proxy
 
 ---
 
