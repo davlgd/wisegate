@@ -8,6 +8,7 @@ A high-performance, secure reverse proxy written in Rust with built-in rate limi
 - **🔒 Secure**: Validates load balancer headers and enforces proxy IP allowlists
 - **📊 Rate Limiting**: Per-IP rate limiting with configurable sliding windows
 - **🚫 IP Filtering**: Block malicious IPs with environment-based configuration
+- **🚫 HTTP Method Filtering**: Block specific HTTP methods (GET, POST, PUT, etc.)
 - **🛡️ URL Pattern Blocking**: Block requests containing specific patterns (e.g., `.php`, `.yaml`)
 - **🌐 Real IP Extraction**: Correctly extracts client IPs from `x-forwarded-for` and `forwarded` headers
 - **⚙️ Zero Dependencies**: Statically compiled binary with no external runtime requirements
@@ -71,6 +72,7 @@ All configuration is done via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BLOCKED_IPS` | _(none)_ | Comma-separated list of blocked client IPs |
+| `BLOCKED_METHODS` | _(none)_ | Comma-separated list of blocked HTTP methods (returns 405) |
 | `BLOCKED_PATTERNS` | _(none)_ | Comma-separated list of URL patterns to block (returns 404) |
 | `RATE_LIMIT_REQUESTS` | `100` | Maximum requests per time window |
 | `RATE_LIMIT_WINDOW_SECS` | `60` | Time window in seconds for rate limiting |
@@ -84,6 +86,7 @@ All configuration is done via environment variables:
 # Security configuration
 export CC_REVERSE_PROXY_IPS="192.168.1.100,10.0.0.1,172.16.0.1"
 export BLOCKED_IPS="192.168.1.200,malicious.ip.here"
+export BLOCKED_METHODS="PUT,DELETE,PATCH"
 export BLOCKED_PATTERNS=".yaml,.php,matomo"
 
 # Rate limiting (100 requests per minute per IP)
@@ -107,9 +110,10 @@ wisegate --listen 8080 --forward 3000
 2. **Proxy Authentication**: Validates the proxy IP (from `by=` field) against allowlist
 3. **Real IP Extraction**: Extracts actual client IP from forwarded headers
 4. **IP Filtering**: Blocks requests from blacklisted IPs
-5. **URL Pattern Filtering**: Blocks URLs containing configured patterns (returns 404)
-6. **Rate Limiting**: Applies per-IP rate limiting with sliding windows
-7. **Header Injection**: Adds `X-Real-IP` header for upstream services
+5. **HTTP Method Filtering**: Blocks requests using blacklisted HTTP methods (returns 405)
+6. **URL Pattern Filtering**: Blocks URLs containing configured patterns (returns 404)
+7. **Rate Limiting**: Applies per-IP rate limiting with sliding windows
+8. **Header Injection**: Adds `X-Real-IP` header for upstream services
 
 ### Request Flow
 
@@ -118,6 +122,7 @@ Client → Load Balancer → WiseGate → Your Service
                                ↓
                         ✅ Validate headers
                         ✅ Check IP allowlist
+                        ✅ Check HTTP methods
                         ✅ Check URL patterns
                         ✅ Apply rate limiting
                         ✅ Add X-Real-IP header

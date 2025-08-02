@@ -42,6 +42,15 @@ pub async fn handle_request(
         ));
     }
 
+    // Check for blocked HTTP methods
+    let request_method = req.method().as_str();
+    if is_method_blocked(request_method) {
+        return Ok(create_error_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "HTTP method not allowed"
+        ));
+    }
+
     // Apply rate limiting
     if !rate_limiter::check_rate_limit(&limiter, &real_client_ip) {
         return Ok(create_error_response(
@@ -237,4 +246,10 @@ pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full
 fn is_url_pattern_blocked(path: &str) -> bool {
     let blocked_patterns = config::get_blocked_patterns();
     blocked_patterns.iter().any(|pattern| path.contains(pattern))
+}
+
+/// Check if HTTP method is blocked
+fn is_method_blocked(method: &str) -> bool {
+    let blocked_methods = config::get_blocked_methods();
+    blocked_methods.iter().any(|blocked_method| blocked_method == &method.to_uppercase())
 }
