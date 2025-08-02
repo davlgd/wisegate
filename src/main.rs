@@ -38,7 +38,7 @@ async fn main() {
     let bind_addr = SocketAddr::from(([0, 0, 0, 0], args.listen));
     let listener = TcpListener::bind(bind_addr).await.unwrap();
 
-    println!("✅ Clever GateKeeper is running on port {}", args.listen);
+    println!("✅ WiseGate is running on port {}", args.listen);
 
     // Accept connections
     loop {

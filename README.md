@@ -1,4 +1,4 @@
-# 🛡️  Clever GateKeeper
+# 🛡️  WiseGate
 
 A high-performance, secure reverse proxy written in Rust with built-in rate limiting and IP filtering capabilities.
 
@@ -23,20 +23,25 @@ A high-performance, secure reverse proxy written in Rust with built-in rate limi
 
 ### Installation
 
-#### Download Binary (Recommended)
+#### Install via Cargo (Recommended)
+```bash
+cargo install wisegate
+```
+
+#### Download Binary
 ```bash
 # Download latest release
-wget https://github.com/davlgd/clever-gatekeeper/releases/latest/download/clever-gatekeeper-linux-x64
-chmod +x clever-gatekeeper-linux-x64
-sudo mv clever-gatekeeper-linux-x64 /usr/local/bin/clever-gatekeeper
+wget https://github.com/davlgd/wisegate/releases/latest/download/wisegate-linux-x64
+chmod +x wisegate-linux-x64
+sudo mv wisegate-linux-x64 /usr/local/bin/wisegate
 ```
 
 #### Build from Source
 ```bash
-git clone https://github.com/davlgd/clever-gatekeeper.git
-cd clever-gatekeeper
+git clone https://github.com/davlgd/wisegate.git
+cd wisegate
 cargo build --release
-sudo cp target/release/clever-gatekeeper /usr/local/bin/
+sudo cp target/release/wisegate /usr/local/bin/
 ```
 
 ### Basic Usage
@@ -46,7 +51,7 @@ sudo cp target/release/clever-gatekeeper /usr/local/bin/
 export CC_REVERSE_PROXY_IPS="192.168.1.100,10.0.0.1"
 
 # Start the proxy
-clever-gatekeeper --listen 8080 --forward 9000
+wisegate --listen 8080 --forward 9000
 ```
 
 Your service is now protected! Requests will be forwarded from port 8080 to port 3000 with added security.
@@ -91,7 +96,7 @@ export MAX_BODY_SIZE_MB=100
 export ENABLE_STREAMING=true
 
 # Start proxy
-clever-gatekeeper --listen 8080 --forward 3000
+wisegate --listen 8080 --forward 3000
 ```
 
 ## 🔍 How It Works
@@ -109,7 +114,7 @@ clever-gatekeeper --listen 8080 --forward 3000
 ### Request Flow
 
 ```
-Client → Load Balancer → Clever GateKeeper → Your Service
+Client → Load Balancer → WiseGate → Your Service
                                ↓
                         ✅ Validate headers
                         ✅ Check IP allowlist
@@ -173,7 +178,7 @@ cargo test
 
 # Integration testing
 export CC_REVERSE_PROXY_IPS="127.0.0.1"
-./target/release/clever-gatekeeper --listen 8080 --forward 3000 &
+./target/release/wisegate --listen 8080 --forward 3000 &
 curl -H "x-forwarded-for: 203.0.113.1" \
      -H "forwarded: by=127.0.0.1" \
      http://localhost:8080/
@@ -197,8 +202,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-- **Issues**: [GitHub Issues](https://github.com/davlgd/clever-gatekeeper/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/davlgd/clever-gatekeeper/discussions)
+- **Issues**: [GitHub Issues](https://github.com/davlgd/wisegate/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/davlgd/wisegate/discussions)
 
 ## 🏆 Acknowledgments
 

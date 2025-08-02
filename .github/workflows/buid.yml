@@ -21,13 +21,13 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: clever-gatekeeper-macos-arm64
+            name: wisegate-macos-arm64
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            name: clever-gatekeeper-linux-x64
+            name: wisegate-linux-x64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            name: clever-gatekeeper-windows-x64.exe
+            name: wisegate-windows-x64.exe
     steps:
     - uses: actions/checkout@v4
 
@@ -43,21 +43,21 @@ jobs:
       if: matrix.os != 'windows-latest'
       run: |
         cd target/${{ matrix.target }}/release
-        strip clever-gatekeeper
-        chmod +x clever-gatekeeper
+        strip wisegate
+        chmod +x wisegate
 
         if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
           sudo apt-get update && sudo apt-get install -y upx
-          upx --best --lzma clever-gatekeeper
+          upx --best --lzma wisegate
         fi
 
-        mv clever-gatekeeper ${{ matrix.name }}
+        mv wisegate ${{ matrix.name }}
 
     - name: Prepare binary (Windows)
       if: matrix.os == 'windows-latest'
       run: |
         cd target/${{ matrix.target }}/release
-        mv clever-gatekeeper.exe ${{ matrix.name }}
+        mv wisegate.exe ${{ matrix.name }}
 
     - name: Upload binary
       uses: actions/upload-artifact@v4
