@@ -1,35 +1,26 @@
 use crate::config;
 
-/// IP validation and blocking module
-
 /// Check if an IP address is in the blocked list
 pub fn is_ip_blocked(ip: &str) -> bool {
     let blocked_ips = config::get_blocked_ips();
     blocked_ips.iter().any(|blocked_ip| blocked_ip == ip)
 }
 
-/// Extract real client IP from load balancer headers
-///
 /// This function implements the security model:
 /// 1. Requires both x-forwarded-for and forwarded headers
 /// 2. Validates that the proxy IP (from 'by=' field) is in allowlist
 /// 3. Extracts the real client IP (last valid IP in x-forwarded-for chain)
+/// 4. Validates the real client IP is not blocked
+/// 5. Returns the real client IP if all checks pass, otherwise None
 pub fn extract_and_validate_real_ip(headers: &hyper::HeaderMap) -> Option<String> {
-    // 1. x-forwarded-for header is mandatory
     let xff = headers.get("x-forwarded-for")?.to_str().ok()?;
-
-    // 2. forwarded header is mandatory for proxy validation
     let forwarded = headers.get("forwarded")?.to_str().ok()?;
-
-    // 3. Extract proxy IP from 'by=' field in forwarded header
     let proxy_ip = extract_proxy_ip_from_forwarded(forwarded)?;
 
-    // 4. Validate proxy IP is in allowlist
     if !is_proxy_ip_allowed(&proxy_ip) {
         return None;
     }
 
-    // 5. Extract real client IP (last valid IP in forwarded chain)
     extract_client_ip_from_xff(xff)
 }
 

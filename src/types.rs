@@ -12,11 +12,8 @@ pub struct RateLimitConfig {
 /// Configuration for proxy behavior and performance
 #[derive(Clone)]
 pub struct ProxyConfig {
-    /// Request timeout for upstream connections
     pub timeout: Duration,
-    /// Maximum body size in bytes (0 = unlimited)
     pub max_body_size: usize,
-    /// Enable streaming for large bodies
     pub enable_streaming: bool,
 }
 

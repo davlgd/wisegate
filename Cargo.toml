@@ -16,8 +16,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [profile.release]
-codegen-units = 1            # Single codegen unit for max optimization
-lto = true                   # Link Time Optimization
-opt-level = "z"              # Optimize for size (use "3" for speed)
-panic = "abort"              # Smaller binary, no unwinding
-strip = true                 # Remove debug symbols
+codegen-units = 1   # Single codegen unit for max optimization
+lto = true          # Link Time Optimization
+opt-level = "z"     # Optimize for size (use "3" for speed)
+panic = "abort"     # Smaller binary, no unwinding
+strip = true        # Remove debug symbols

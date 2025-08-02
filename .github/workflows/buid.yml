@@ -78,9 +78,6 @@ jobs:
       with:
         path: ./binaries
 
-    - name: Display structure of downloaded files
-      run: ls -la ./binaries/**
-
     - name: Upload Release Assets
       uses: softprops/action-gh-release@v1
       with:
