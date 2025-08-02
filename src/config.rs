@@ -84,3 +84,154 @@ pub fn get_blocked_methods() -> Vec<String> {
         .filter(|method| !method.is_empty())
         .collect()
 }
+
+#[cfg(test)]  
+mod tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn test_get_allowed_proxy_ips_with_cc_reverse_proxy_ips() {
+        // Set up environment
+        unsafe {
+            env::set_var(env_vars::ALLOWED_PROXY_IPS, "192.168.1.1,10.0.0.1");
+        }
+        
+        let result = get_allowed_proxy_ips();
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 2);
+        assert_eq!(ips[0], "192.168.1.1");
+        assert_eq!(ips[1], "10.0.0.1");
+        
+        // Clean up
+        unsafe {
+            env::remove_var(env_vars::ALLOWED_PROXY_IPS);
+        }
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_with_alternative_var() {
+        // Set up alternative variable
+        unsafe {
+            env::set_var(env_vars::TRUSTED_PROXY_IPS_VAR, "MY_CUSTOM_PROXY_IPS");
+            env::set_var("MY_CUSTOM_PROXY_IPS", "172.16.0.1,203.0.113.1");
+        }
+        
+        let result = get_allowed_proxy_ips();
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 2);
+        assert_eq!(ips[0], "172.16.0.1");
+        assert_eq!(ips[1], "203.0.113.1");
+        
+        // Clean up
+        unsafe {
+            env::remove_var(env_vars::TRUSTED_PROXY_IPS_VAR);
+            env::remove_var("MY_CUSTOM_PROXY_IPS");
+        }
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_cc_takes_priority() {
+        // Set up both variables - CC_REVERSE_PROXY_IPS should take priority
+        unsafe {
+            env::set_var(env_vars::ALLOWED_PROXY_IPS, "192.168.1.1");
+            env::set_var(env_vars::TRUSTED_PROXY_IPS_VAR, "MY_CUSTOM_PROXY_IPS");
+            env::set_var("MY_CUSTOM_PROXY_IPS", "172.16.0.1");
+        }
+        
+        let result = get_allowed_proxy_ips();
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 1);
+        assert_eq!(ips[0], "192.168.1.1"); // Should use CC_REVERSE_PROXY_IPS value
+        
+        // Clean up
+        unsafe {
+            env::remove_var(env_vars::ALLOWED_PROXY_IPS);
+            env::remove_var(env_vars::TRUSTED_PROXY_IPS_VAR);
+            env::remove_var("MY_CUSTOM_PROXY_IPS");
+        }
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_fallback_to_alternative() {
+        // Don't set CC_REVERSE_PROXY_IPS, only alternative
+        unsafe {
+            env::set_var(env_vars::TRUSTED_PROXY_IPS_VAR, "COMPANY_PROXY_LIST");
+            env::set_var("COMPANY_PROXY_LIST", "10.1.1.1,10.1.1.2,10.1.1.3");
+        }
+        
+        let result = get_allowed_proxy_ips();
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 3);
+        assert_eq!(ips[0], "10.1.1.1");
+        assert_eq!(ips[1], "10.1.1.2");
+        assert_eq!(ips[2], "10.1.1.3");
+        
+        // Clean up
+        unsafe {
+            env::remove_var(env_vars::TRUSTED_PROXY_IPS_VAR);
+            env::remove_var("COMPANY_PROXY_LIST");
+        }
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_none_when_no_vars() {
+        // Make sure no relevant env vars are set
+        unsafe {
+            env::remove_var(env_vars::ALLOWED_PROXY_IPS);
+            env::remove_var(env_vars::TRUSTED_PROXY_IPS_VAR);
+        }
+        
+        let result = get_allowed_proxy_ips();
+        
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_handles_whitespace() {
+        // Test with whitespace around IPs
+        unsafe {
+            env::set_var(env_vars::ALLOWED_PROXY_IPS, " 192.168.1.1 , 10.0.0.1 ");
+        }
+        
+        let result = get_allowed_proxy_ips();
+        
+        assert!(result.is_some());
+        let ips = result.unwrap();
+        assert_eq!(ips.len(), 2);
+        assert_eq!(ips[0], "192.168.1.1");
+        assert_eq!(ips[1], "10.0.0.1");
+        
+        // Clean up
+        unsafe {
+            env::remove_var(env_vars::ALLOWED_PROXY_IPS);
+        }
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_ignores_empty_alternative_var() {
+        // Set alternative var but with empty value
+        unsafe {
+            env::set_var(env_vars::TRUSTED_PROXY_IPS_VAR, "EMPTY_PROXY_VAR");
+            env::set_var("EMPTY_PROXY_VAR", "");
+        }
+        
+        let result = get_allowed_proxy_ips();
+        
+        assert!(result.is_none());
+        
+        // Clean up
+        unsafe {
+            env::remove_var(env_vars::TRUSTED_PROXY_IPS_VAR);
+            env::remove_var("EMPTY_PROXY_VAR");
+        }
+    }
+}
