@@ -14,7 +14,7 @@ pub async fn handle_request(
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     let proxy_config = config::get_proxy_config();
 
-    // Step 1: Extract and validate real client IP
+    // Extract and validate real client IP
     let real_client_ip = match ip_filter::extract_and_validate_real_ip(req.headers()) {
         Some(ip) => ip,
         None => {
@@ -25,7 +25,7 @@ pub async fn handle_request(
         }
     };
 
-    // Step 2: Check if IP is blocked
+    // Check if IP is blocked
     if ip_filter::is_ip_blocked(&real_client_ip) {
         return Ok(create_error_response(
             StatusCode::FORBIDDEN,
@@ -33,7 +33,16 @@ pub async fn handle_request(
         ));
     }
 
-    // Step 3: Apply rate limiting
+    // Check for blocked URL patterns
+    let request_path = req.uri().path();
+    if is_url_pattern_blocked(request_path) {
+        return Ok(create_error_response(
+            StatusCode::NOT_FOUND,
+            "Not Found"
+        ));
+    }
+
+    // Apply rate limiting
     if !rate_limiter::check_rate_limit(&limiter, &real_client_ip) {
         return Ok(create_error_response(
             StatusCode::TOO_MANY_REQUESTS,
@@ -41,14 +50,14 @@ pub async fn handle_request(
         ));
     }
 
-    // Step 4: Add X-Real-IP header for upstream service
+    // Add X-Real-IP header for upstream service
     let mut req = req;
     req.headers_mut().insert(
         "x-real-ip",
         real_client_ip.parse().unwrap()
     );
 
-    // Step 5: Forward request with streaming support
+    // Forward request with streaming support
     if proxy_config.enable_streaming {
         forward_request_streaming(req, forward_port, &proxy_config).await
     } else {
@@ -222,4 +231,10 @@ pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full
         .header("content-type", "text/plain")
         .body(Full::new(bytes::Bytes::from(message.to_string())))
         .unwrap()
+}
+
+/// Check if URL path contains any blocked patterns
+fn is_url_pattern_blocked(path: &str) -> bool {
+    let blocked_patterns = config::get_blocked_patterns();
+    blocked_patterns.iter().any(|pattern| path.contains(pattern))
 }

@@ -64,3 +64,13 @@ pub fn get_blocked_ips() -> Vec<String> {
         .filter(|ip| !ip.is_empty())
         .collect()
 }
+
+/// Get list of blocked URL patterns from environment
+pub fn get_blocked_patterns() -> Vec<String> {
+    env::var(env_vars::BLOCKED_PATTERNS)
+        .unwrap_or_default()
+        .split(',')
+        .map(|pattern| pattern.trim().to_string())
+        .filter(|pattern| !pattern.is_empty())
+        .collect()
+}
