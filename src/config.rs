@@ -5,7 +5,6 @@ use crate::env_vars;
 use crate::types::{ProxyConfig, RateLimitConfig};
 
 /// Configuration management module
-
 /// Get rate limiting configuration from environment variables
 pub fn get_rate_limit_config() -> RateLimitConfig {
     let max_requests = env::var(env_vars::RATE_LIMIT_REQUESTS)
