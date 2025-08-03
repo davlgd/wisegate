@@ -22,6 +22,12 @@ use args::Args;
 async fn main() {
     let args = Args::parse();
 
+    // Validate arguments
+    if let Err(err) = args.validate() {
+        eprintln!("❌ Configuration error: {}", err);
+        std::process::exit(1);
+    }
+
     server::print_startup_info(&args);
 
     // Initialize rate limiter
