@@ -21,10 +21,7 @@ where
         Ok(value) => match value.parse() {
             Ok(parsed) => parsed,
             Err(_) => {
-                eprintln!(
-                    "⚠️  Invalid value for {}: '{}', using default",
-                    var_name, value
-                );
+                eprintln!("⚠️  Invalid value for {var_name}: '{value}', using default");
                 default
             }
         },

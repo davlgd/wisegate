@@ -24,7 +24,7 @@ async fn main() {
 
     // Validate arguments
     if let Err(err) = args.validate() {
-        eprintln!("❌ Configuration error: {}", err);
+        eprintln!("❌ Configuration error: {err}");
         std::process::exit(1);
     }
 
@@ -50,13 +50,13 @@ async fn main() {
         let (stream, addr) = match listener.accept().await {
             Ok(conn) => conn,
             Err(err) => {
-                eprintln!("⚠️  Failed to accept connection: {}", err);
+                eprintln!("⚠️  Failed to accept connection: {err}");
                 continue;
             }
         };
 
         if args.verbose && !args.quiet {
-            println!("📡 New connection from {}", addr);
+            println!("📡 New connection from {addr}");
         }
 
         let io = TokioIo::new(stream);
@@ -73,9 +73,9 @@ async fn main() {
             if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
                 if !quiet {
                     if verbose {
-                        eprintln!("⚠️  Connection error from {}: {}", addr, err);
+                        eprintln!("⚠️  Connection error from {addr}: {err}");
                     } else {
-                        eprintln!("⚠️  Connection error: {}", err);
+                        eprintln!("⚠️  Connection error: {err}");
                     }
                 }
             }

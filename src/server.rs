@@ -104,10 +104,10 @@ fn print_env_config() {
                 } else {
                     value
                 };
-                println!("   {:<25} = {}", var_name, display_value);
+                println!("   {var_name:<25} = {display_value}");
             }
             Err(_) => {
-                println!("   {:<25} = [NOT SET]", var_name);
+                println!("   {var_name:<25} = [NOT SET]");
             }
         }
     }
