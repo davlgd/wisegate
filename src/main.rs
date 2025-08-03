@@ -35,17 +35,34 @@ async fn main() {
 
     // Bind to address
     let bind_addr = SocketAddr::from(([0, 0, 0, 0], args.listen));
-    let listener = TcpListener::bind(bind_addr).await.unwrap();
+    let listener = match TcpListener::bind(bind_addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+            eprintln!("❌ Failed to bind to port {}: {}", args.listen, err);
+            std::process::exit(1);
+        }
+    };
 
     println!("✅ WiseGate is running on port {}", args.listen);
 
     // Accept connections
     loop {
-        let (stream, _) = listener.accept().await.unwrap();
-        let io = TokioIo::new(stream);
+        let (stream, addr) = match listener.accept().await {
+            Ok(conn) => conn,
+            Err(err) => {
+                eprintln!("⚠️  Failed to accept connection: {}", err);
+                continue;
+            }
+        };
 
+        if args.verbose {
+            println!("📡 New connection from {}", addr);
+        }
+
+        let io = TokioIo::new(stream);
         let limiter = rate_limiter.clone();
         let forward_port = args.forward;
+        let verbose = args.verbose;
 
         tokio::task::spawn(async move {
             let service = service_fn(move |req| {
@@ -53,7 +70,11 @@ async fn main() {
             });
 
             if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-                eprintln!("Error serving connection: {err:?}");
+                if verbose {
+                    eprintln!("⚠️  Connection error from {}: {}", addr, err);
+                } else {
+                    eprintln!("⚠️  Connection error: {}", err);
+                }
             }
         });
     }
