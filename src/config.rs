@@ -1,5 +1,6 @@
 use std::env;
 use std::time::Duration;
+use std::str::FromStr;
 
 use crate::env_vars;
 use crate::types::{ProxyConfig, RateLimitConfig};
@@ -9,6 +10,24 @@ const DEFAULT_RATE_LIMIT_REQUESTS: u32 = 100;
 const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
+
+/// Helper function to parse environment variables with fallback to defaults
+/// Logs warnings for invalid values
+fn parse_env_var_or_default<T>(var_name: &str, default: T) -> T
+where
+    T: FromStr + Copy,
+{
+    match env::var(var_name) {
+        Ok(value) => match value.parse() {
+            Ok(parsed) => parsed,
+            Err(_) => {
+                eprintln!("⚠️  Invalid value for {}: '{}', using default", var_name, value);
+                default
+            }
+        },
+        Err(_) => default,
+    }
+}
 
 /// Get rate limiting configuration from environment variables
 pub fn get_rate_limit_config() -> RateLimitConfig {
