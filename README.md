@@ -1,4 +1,4 @@
-# 🛡️  WiseGate
+# 🛡️ WiseGate
 
 A high-performance, secure reverse proxy written in Rust with built-in rate limiting and IP filtering capabilities.
 
@@ -60,6 +60,18 @@ wisegate --listen 8080 --forward 9000
 
 Your service is now protected! Requests will be forwarded from port 8080 to port 9000 with added security.
 
+### CLI Options
+
+WiseGate supports several command-line options for different use cases:
+
+- `--listen` / `-l`: Port to listen on for incoming requests
+- `--forward` / `-f`: Port to forward requests to
+- `--verbose` / `-v`: Show detailed configuration and startup information
+- `--quiet` / `-q`: Minimal output mode (conflicts with verbose)
+- `--help` / `-h`: Show help information
+
+The `--verbose` mode shows detailed configuration including environment variables, while `--quiet` mode only displays essential startup information - perfect for production deployments.
+
 ## ⚙️ Configuration
 
 All configuration is done via environment variables:
@@ -84,7 +96,6 @@ All configuration is done via environment variables:
 | `RATE_LIMIT_WINDOW_SECS` | `60` | Time window in seconds for rate limiting |
 | `PROXY_TIMEOUT_SECS` | `30` | Timeout for upstream requests in seconds |
 | `MAX_BODY_SIZE_MB` | `100` | Maximum request body size in MB (0 = unlimited) |
-| `ENABLE_STREAMING` | `true` | Enable streaming mode for better memory usage |
 
 ### Configuration Examples
 
@@ -99,7 +110,7 @@ export BLOCKED_PATTERNS=".yaml,.php,matomo"
 export RATE_LIMIT_REQUESTS=100
 export RATE_LIMIT_WINDOW_SECS=60
 
-wisegate --listen 8080 --forward 9000
+wisegate -l 8080 -f 9000
 ```
 
 #### Custom Alternative Variable
@@ -110,7 +121,7 @@ export TRUSTED_PROXY_IPS_VAR="MY_PROXY_IPS"
 export MY_PROXY_IPS="192.168.1.100,10.0.0.1"
 export BLOCKED_METHODS="PUT,DELETE,PATCH"
 
-wisegate --listen 8080 --forward 9000
+wisegate -l 8080 -f 9000
 ```
 
 #### Permissive Mode (Basic Security)
@@ -120,7 +131,7 @@ wisegate --listen 8080 --forward 9000
 export BLOCKED_METHODS="PUT,DELETE,PATCH"
 export BLOCKED_PATTERNS=".yaml,.php,matomo"
 
-wisegate --listen 8080 --forward 9000
+wisegate -l 8080 -f 9000
 ```
 
 ## 🔍 How It Works
@@ -184,11 +195,6 @@ x-real-ip: 203.0.113.1
 
 ## ⚡ Performance Features
 
-### Streaming Support
-- **Automatic**: Enabled by default for better memory usage
-- **Configurable**: Set `ENABLE_STREAMING=false` for legacy buffered mode
-- **Memory Efficient**: Handles large files without loading entirely into RAM
-
 ### Request Timeouts
 - **Configurable**: Set custom timeouts with `PROXY_TIMEOUT_SECS`
 - **Default**: 30 seconds timeout for upstream requests
@@ -197,7 +203,7 @@ x-real-ip: 203.0.113.1
 ### Body Size Limits
 - **Flexible**: Configure maximum request body size
 - **Protection**: Prevents memory exhaustion from large uploads
-- **Streaming Mode**: More lenient limits when streaming is enabled
+- **Configurable**: Set `MAX_BODY_SIZE_MB=0` for unlimited size
 
 ## 🤝 Contributing
 
@@ -235,14 +241,14 @@ cargo test
 
 # Integration testing (Strict Mode)
 export CC_REVERSE_PROXY_IPS="127.0.0.1"
-./target/release/wisegate --listen 8080 --forward 3000 &
+./target/release/wisegate -l 8080 -f 9000 &
 curl -H "x-forwarded-for: 203.0.113.1" \
      -H "forwarded: by=127.0.0.1" \
      http://localhost:8080/
 
 # Integration testing (Permissive Mode)
 unset CC_REVERSE_PROXY_IPS
-./target/release/wisegate --listen 8081 --forward 3001 &
+./target/release/wisegate -l 8081 -f 9001 &
 curl http://localhost:8081/
 ```
 
