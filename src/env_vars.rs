@@ -16,7 +16,6 @@ pub const RATE_LIMIT_WINDOW_SECS: &str = "RATE_LIMIT_WINDOW_SECS";
 /// Proxy behavior configuration
 pub const PROXY_TIMEOUT_SECS: &str = "PROXY_TIMEOUT_SECS";
 pub const MAX_BODY_SIZE_MB: &str = "MAX_BODY_SIZE_MB";
-pub const ENABLE_STREAMING: &str = "ENABLE_STREAMING";
 
 /// Get all environment variable names for documentation/validation
 pub fn all_env_vars() -> &'static [&'static str] {
@@ -30,6 +29,5 @@ pub fn all_env_vars() -> &'static [&'static str] {
         RATE_LIMIT_WINDOW_SECS,
         PROXY_TIMEOUT_SECS,
         MAX_BODY_SIZE_MB,
-        ENABLE_STREAMING,
     ]
 }

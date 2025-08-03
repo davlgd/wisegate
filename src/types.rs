@@ -21,7 +21,6 @@ impl RateLimitConfig {
 pub struct ProxyConfig {
     pub timeout: Duration,
     pub max_body_size: usize,
-    pub enable_streaming: bool,
 }
 
 impl ProxyConfig {

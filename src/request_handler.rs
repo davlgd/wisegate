@@ -74,21 +74,16 @@ pub async fn handle_request(
         }
     }
 
-    // Forward request with streaming support
-    if proxy_config.enable_streaming {
-        forward_request_streaming(req, forward_port, &proxy_config).await
-    } else {
-        forward_request_buffered(req, forward_port, &proxy_config).await
-    }
+    // Forward the request
+    forward_request(req, forward_port, &proxy_config).await
 }
 
-/// Forward request with buffered body (legacy mode for compatibility)
-async fn forward_request_buffered(
+/// Forward request to upstream service
+async fn forward_request(
     req: Request<Incoming>,
     port: u16,
     proxy_config: &crate::types::ProxyConfig,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
-    // Collect the body into memory
     let (parts, body) = req.into_parts();
     let body_bytes = match body.collect().await {
         Ok(bytes) => {
@@ -99,42 +94,6 @@ async fn forward_request_buffered(
                 return Ok(create_error_response(
                     StatusCode::PAYLOAD_TOO_LARGE,
                     "Request body too large"
-                ));
-            }
-
-            collected_bytes
-        },
-        Err(_) => {
-            return Ok(create_error_response(
-                StatusCode::BAD_REQUEST,
-                "Failed to read request body"
-            ));
-        }
-    };
-
-    // Forward using buffered approach
-    forward_with_reqwest(parts, body_bytes, port, proxy_config).await
-}
-
-/// Forward request with streaming support (recommended for large bodies)
-async fn forward_request_streaming(
-    req: Request<Incoming>,
-    port: u16,
-    proxy_config: &crate::types::ProxyConfig,
-) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
-    let (parts, body) = req.into_parts();
-
-    // For streaming, we'll still use reqwest but with better memory management
-    // In a more advanced implementation, we'd use hyper's direct streaming
-    let body_bytes = match body.collect().await {
-        Ok(bytes) => {
-            let collected_bytes = bytes.to_bytes();
-
-            // More lenient size check for streaming mode
-            if proxy_config.max_body_size > 0 && collected_bytes.len() > proxy_config.max_body_size * 2 {
-                return Ok(create_error_response(
-                    StatusCode::PAYLOAD_TOO_LARGE,
-                    "Request body exceeds maximum allowed size"
                 ));
             }
 

@@ -72,15 +72,9 @@ pub fn get_proxy_config() -> ProxyConfig {
         DEFAULT_MAX_BODY_SIZE_MB,
     );
 
-    let enable_streaming = parse_env_var_or_default(
-        env_vars::ENABLE_STREAMING,
-        true,
-    );
-
     let config = ProxyConfig {
         timeout: Duration::from_secs(timeout_secs),
         max_body_size: ProxyConfig::mb_to_bytes(max_body_mb),
-        enable_streaming,
     };
 
     // Validate configuration
@@ -89,7 +83,6 @@ pub fn get_proxy_config() -> ProxyConfig {
         return ProxyConfig {
             timeout: Duration::from_secs(DEFAULT_PROXY_TIMEOUT_SECS),
             max_body_size: ProxyConfig::mb_to_bytes(DEFAULT_MAX_BODY_SIZE_MB),
-            enable_streaming: true,
         };
     }
 

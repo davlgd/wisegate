@@ -28,7 +28,6 @@ pub fn print_startup_info(args: &Args) {
     println!("🔧 Proxy Configuration:");
     println!("   Timeout:        {} seconds", proxy_config.timeout.as_secs());
     println!("   Max Body Size:  {} MB", proxy_config.max_body_size_mb());
-    println!("   Streaming:      {}", if proxy_config.enable_streaming { "enabled" } else { "disabled" });
 
     // Show security configuration
     print_security_config();
