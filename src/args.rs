@@ -20,6 +20,10 @@ pub struct Args {
     /// Enable verbose output
     #[arg(long, short = 'v', help = "Show detailed configuration and startup information")]
     pub verbose: bool,
+
+    /// Enable quiet mode (minimal output)
+    #[arg(long, short = 'q', help = "Suppress configuration output, show only essential messages", conflicts_with = "verbose")]
+    pub quiet: bool,
 }
 
 impl Args {

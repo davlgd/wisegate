@@ -3,6 +3,13 @@ use std::env;
 
 /// Print startup banner with configuration
 pub fn print_startup_info(args: &Args) {
+    if args.quiet {
+        // Quiet mode: only essential information
+        println!("🚀 WiseGate v{} starting on port {}", env!("CARGO_PKG_VERSION"), args.listen);
+        return;
+    }
+
+    // Normal/verbose mode: full configuration display
     println!("🛡️  {} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
     println!("   {}", env!("CARGO_PKG_DESCRIPTION"));
     println!();

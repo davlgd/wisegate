@@ -55,7 +55,7 @@ async fn main() {
             }
         };
 
-        if args.verbose {
+        if args.verbose && !args.quiet {
             println!("📡 New connection from {}", addr);
         }
 
@@ -63,6 +63,7 @@ async fn main() {
         let limiter = rate_limiter.clone();
         let forward_port = args.forward;
         let verbose = args.verbose;
+        let quiet = args.quiet;
 
         tokio::task::spawn(async move {
             let service = service_fn(move |req| {
@@ -70,10 +71,12 @@ async fn main() {
             });
 
             if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-                if verbose {
-                    eprintln!("⚠️  Connection error from {}: {}", addr, err);
-                } else {
-                    eprintln!("⚠️  Connection error: {}", err);
+                if !quiet {
+                    if verbose {
+                        eprintln!("⚠️  Connection error from {}: {}", addr, err);
+                    } else {
+                        eprintln!("⚠️  Connection error: {}", err);
+                    }
                 }
             }
         });
