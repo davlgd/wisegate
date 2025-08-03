@@ -201,7 +201,7 @@ x-real-ip: 203.0.113.1
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcome!
 
 - **Issues**: [GitHub Issues](https://github.com/davlgd/wisegate/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/davlgd/wisegate/discussions)
