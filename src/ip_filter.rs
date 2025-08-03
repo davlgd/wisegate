@@ -99,12 +99,14 @@ fn is_valid_ip_format(ip: &str) -> bool {
     if ip.is_empty() || ip.len() > 45 {
         return false; // Max IPv6 length is 39, add some buffer
     }
-    
+
     // Basic format check
     let has_valid_format = ip.contains('.') || ip.contains(':');
-    
+
     // Additional validation: should not contain spaces or other invalid chars
-    let has_invalid_chars = ip.chars().any(|c| !c.is_ascii_alphanumeric() && !".:[]".contains(c));
-    
+    let has_invalid_chars = ip
+        .chars()
+        .any(|c| !c.is_ascii_alphanumeric() && !".:[]".contains(c));
+
     has_valid_format && !has_invalid_chars
 }

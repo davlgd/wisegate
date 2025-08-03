@@ -1,6 +1,6 @@
 use std::env;
-use std::time::Duration;
 use std::str::FromStr;
+use std::time::Duration;
 
 use crate::env_vars;
 use crate::types::{ProxyConfig, RateLimitConfig};
@@ -21,7 +21,10 @@ where
         Ok(value) => match value.parse() {
             Ok(parsed) => parsed,
             Err(_) => {
-                eprintln!("⚠️  Invalid value for {}: '{}', using default", var_name, value);
+                eprintln!(
+                    "⚠️  Invalid value for {}: '{}', using default",
+                    var_name, value
+                );
                 default
             }
         },
@@ -32,10 +35,8 @@ where
 /// Get rate limiting configuration from environment variables
 /// Invalid values fall back to defaults and log warnings
 pub fn get_rate_limit_config() -> RateLimitConfig {
-    let max_requests = parse_env_var_or_default(
-        env_vars::RATE_LIMIT_REQUESTS,
-        DEFAULT_RATE_LIMIT_REQUESTS,
-    );
+    let max_requests =
+        parse_env_var_or_default(env_vars::RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_REQUESTS);
 
     let window_secs = parse_env_var_or_default(
         env_vars::RATE_LIMIT_WINDOW_SECS,
@@ -62,15 +63,11 @@ pub fn get_rate_limit_config() -> RateLimitConfig {
 /// Get proxy configuration from environment variables
 /// Invalid values fall back to defaults and log warnings
 pub fn get_proxy_config() -> ProxyConfig {
-    let timeout_secs = parse_env_var_or_default(
-        env_vars::PROXY_TIMEOUT_SECS,
-        DEFAULT_PROXY_TIMEOUT_SECS,
-    );
+    let timeout_secs =
+        parse_env_var_or_default(env_vars::PROXY_TIMEOUT_SECS, DEFAULT_PROXY_TIMEOUT_SECS);
 
-    let max_body_mb = parse_env_var_or_default(
-        env_vars::MAX_BODY_SIZE_MB,
-        DEFAULT_MAX_BODY_SIZE_MB,
-    );
+    let max_body_mb =
+        parse_env_var_or_default(env_vars::MAX_BODY_SIZE_MB, DEFAULT_MAX_BODY_SIZE_MB);
 
     let config = ProxyConfig {
         timeout: Duration::from_secs(timeout_secs),
@@ -156,7 +153,9 @@ mod tests {
     use std::collections::HashMap;
 
     // Helper function to create a mock environment function for testing
-    fn create_mock_env(vars: HashMap<&str, &str>) -> impl Fn(&str) -> Result<String, std::env::VarError> {
+    fn create_mock_env(
+        vars: HashMap<&str, &str>,
+    ) -> impl Fn(&str) -> Result<String, std::env::VarError> {
         move |key: &str| {
             vars.get(key)
                 .map(|v| v.to_string())

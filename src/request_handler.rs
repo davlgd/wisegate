@@ -1,5 +1,5 @@
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Incoming, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode, body::Incoming};
 use std::convert::Infallible;
 
 use crate::config;
@@ -26,7 +26,7 @@ pub async fn handle_request(
                 // If allowlist is configured but validation failed, reject the request
                 return Ok(create_error_response(
                     StatusCode::FORBIDDEN,
-                    "Invalid request: missing or invalid proxy headers"
+                    "Invalid request: missing or invalid proxy headers",
                 ));
             }
         }
@@ -36,17 +36,14 @@ pub async fn handle_request(
     if real_client_ip != "unknown" && ip_filter::is_ip_blocked(&real_client_ip) {
         return Ok(create_error_response(
             StatusCode::FORBIDDEN,
-            "IP address is blocked"
+            "IP address is blocked",
         ));
     }
 
     // Check for blocked URL patterns
     let request_path = req.uri().path();
     if is_url_pattern_blocked(request_path) {
-        return Ok(create_error_response(
-            StatusCode::NOT_FOUND,
-            "Not Found"
-        ));
+        return Ok(create_error_response(StatusCode::NOT_FOUND, "Not Found"));
     }
 
     // Check for blocked HTTP methods
@@ -54,7 +51,7 @@ pub async fn handle_request(
     if is_method_blocked(request_method) {
         return Ok(create_error_response(
             StatusCode::METHOD_NOT_ALLOWED,
-            "HTTP method not allowed"
+            "HTTP method not allowed",
         ));
     }
 
@@ -62,7 +59,7 @@ pub async fn handle_request(
     if real_client_ip != "unknown" && !rate_limiter::check_rate_limit(&limiter, &real_client_ip) {
         return Ok(create_error_response(
             StatusCode::TOO_MANY_REQUESTS,
-            "Rate limit exceeded"
+            "Rate limit exceeded",
         ));
     }
 
@@ -90,19 +87,20 @@ async fn forward_request(
             let collected_bytes = bytes.to_bytes();
 
             // Check body size limit
-            if proxy_config.max_body_size > 0 && collected_bytes.len() > proxy_config.max_body_size {
+            if proxy_config.max_body_size > 0 && collected_bytes.len() > proxy_config.max_body_size
+            {
                 return Ok(create_error_response(
                     StatusCode::PAYLOAD_TOO_LARGE,
-                    "Request body too large"
+                    "Request body too large",
                 ));
             }
 
             collected_bytes
-        },
+        }
         Err(_) => {
             return Ok(create_error_response(
                 StatusCode::BAD_REQUEST,
-                "Failed to read request body"
+                "Failed to read request body",
             ));
         }
     };
@@ -117,7 +115,6 @@ async fn forward_with_reqwest(
     port: u16,
     proxy_config: &crate::types::ProxyConfig,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
-
     // Construct destination URI
     let destination_uri = format!(
         "http://localhost:{}{}",
@@ -144,10 +141,12 @@ async fn forward_with_reqwest(
             // Try to parse custom methods
             match reqwest::Method::from_bytes(method.as_bytes()) {
                 Ok(custom_method) => client.request(custom_method, &destination_uri),
-                Err(_) => return Ok(create_error_response(
-                    StatusCode::METHOD_NOT_ALLOWED,
-                    "HTTP method not supported"
-                )),
+                Err(_) => {
+                    return Ok(create_error_response(
+                        StatusCode::METHOD_NOT_ALLOWED,
+                        "HTTP method not supported",
+                    ));
+                }
             }
         }
     };
@@ -186,7 +185,7 @@ async fn forward_with_reqwest(
                         if !is_hop_by_hop_header(&header_name) {
                             if let (Ok(hyper_name), Ok(hyper_value)) = (
                                 hyper::header::HeaderName::from_bytes(name.as_str().as_bytes()),
-                                hyper::header::HeaderValue::from_bytes(value.as_bytes())
+                                hyper::header::HeaderValue::from_bytes(value.as_bytes()),
                             ) {
                                 hyper_response.headers_mut().insert(hyper_name, hyper_value);
                             }
@@ -197,8 +196,8 @@ async fn forward_with_reqwest(
                 }
                 Err(_) => Ok(create_error_response(
                     StatusCode::BAD_GATEWAY,
-                    "Failed to read response body"
-                ))
+                    "Failed to read response body",
+                )),
             }
         }
         Err(err) => {
@@ -206,17 +205,17 @@ async fn forward_with_reqwest(
             if err.is_timeout() {
                 Ok(create_error_response(
                     StatusCode::GATEWAY_TIMEOUT,
-                    "Upstream service timeout"
+                    "Upstream service timeout",
                 ))
             } else if err.is_connect() {
                 Ok(create_error_response(
                     StatusCode::BAD_GATEWAY,
-                    "Could not connect to upstream service"
+                    "Could not connect to upstream service",
                 ))
             } else {
                 Ok(create_error_response(
                     StatusCode::BAD_GATEWAY,
-                    "Upstream service error"
+                    "Upstream service error",
                 ))
             }
         }
@@ -235,19 +234,30 @@ pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full
 /// Check if URL path contains any blocked patterns
 fn is_url_pattern_blocked(path: &str) -> bool {
     let blocked_patterns = config::get_blocked_patterns();
-    blocked_patterns.iter().any(|pattern| path.contains(pattern))
+    blocked_patterns
+        .iter()
+        .any(|pattern| path.contains(pattern))
 }
 
 /// Check if HTTP method is blocked
 fn is_method_blocked(method: &str) -> bool {
     let blocked_methods = config::get_blocked_methods();
-    blocked_methods.iter().any(|blocked_method| blocked_method == &method.to_uppercase())
+    blocked_methods
+        .iter()
+        .any(|blocked_method| blocked_method == &method.to_uppercase())
 }
 
 /// Check if a header is a hop-by-hop header that shouldn't be forwarded
 fn is_hop_by_hop_header(header_name: &str) -> bool {
-    matches!(header_name, 
-        "connection" | "keep-alive" | "proxy-authenticate" | "proxy-authorization" |
-        "te" | "trailers" | "transfer-encoding" | "upgrade"
+    matches!(
+        header_name,
+        "connection"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "te"
+            | "trailers"
+            | "transfer-encoding"
+            | "upgrade"
     )
 }

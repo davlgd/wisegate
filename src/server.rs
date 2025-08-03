@@ -5,12 +5,20 @@ use std::env;
 pub fn print_startup_info(args: &Args) {
     if args.quiet {
         // Quiet mode: only essential information
-        println!("🚀 WiseGate v{} starting on port {}", env!("CARGO_PKG_VERSION"), args.listen);
+        println!(
+            "🚀 WiseGate v{} starting on port {}",
+            env!("CARGO_PKG_VERSION"),
+            args.listen
+        );
         return;
     }
 
     // Normal/verbose mode: full configuration display
-    println!("🛡️  {} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+    println!(
+        "🛡️  {} v{}",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
     println!("   {}", env!("CARGO_PKG_DESCRIPTION"));
     println!();
     println!("📡 Network Configuration:");
@@ -20,13 +28,18 @@ pub fn print_startup_info(args: &Args) {
 
     let rate_config = config::get_rate_limit_config();
     println!("⚡ Rate Limiting:");
-    println!("   Max Requests:   {} per {} seconds",
-             rate_config.max_requests,
-             rate_config.window_duration.as_secs());
+    println!(
+        "   Max Requests:   {} per {} seconds",
+        rate_config.max_requests,
+        rate_config.window_duration.as_secs()
+    );
 
     let proxy_config = config::get_proxy_config();
     println!("🔧 Proxy Configuration:");
-    println!("   Timeout:        {} seconds", proxy_config.timeout.as_secs());
+    println!(
+        "   Timeout:        {} seconds",
+        proxy_config.timeout.as_secs()
+    );
     println!("   Max Body Size:  {} MB", proxy_config.max_body_size_mb());
 
     // Show security configuration
