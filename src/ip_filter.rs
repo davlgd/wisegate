@@ -67,11 +67,13 @@ fn is_proxy_ip_allowed(proxy_ip: &str) -> bool {
 }
 
 /// Extract client IP from x-forwarded-for header (last valid IP)
+/// The last IP in the chain should be the real client IP
 fn extract_client_ip_from_xff(xff: &str) -> Option<String> {
     xff.split(',')
         .map(|ip| ip.trim())
+        .filter(|ip| !ip.is_empty())
         .filter(|ip| is_valid_ip_format(ip))
-        .next_back()
+        .next_back() // Get last element efficiently (O(1) vs last()'s O(n))
         .map(|ip| ip.to_string())
 }
 
@@ -92,6 +94,17 @@ fn extract_client_ip_from_forwarded(forwarded: &str) -> Option<String> {
 }
 
 /// Basic IP format validation (contains . for IPv4 or : for IPv6)
+/// Also validates that it's not empty and doesn't contain invalid characters
 fn is_valid_ip_format(ip: &str) -> bool {
-    ip.contains('.') || ip.contains(':')
+    if ip.is_empty() || ip.len() > 45 {
+        return false; // Max IPv6 length is 39, add some buffer
+    }
+    
+    // Basic format check
+    let has_valid_format = ip.contains('.') || ip.contains(':');
+    
+    // Additional validation: should not contain spaces or other invalid chars
+    let has_invalid_chars = ip.chars().any(|c| !c.is_ascii_alphanumeric() && !".:[]".contains(c));
+    
+    has_valid_format && !has_invalid_chars
 }
