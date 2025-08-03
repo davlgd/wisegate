@@ -236,9 +236,25 @@ cargo build --release --target x86_64-unknown-linux-musl
 ### Testing
 
 ```bash
-# Run tests
-cargo test
+# Run unit tests
+cargo test --lib
 
+# Run integration tests (comprehensive test suite)
+cargo test --test comprehensive_integration_tests -- --test-threads=1
+
+# Run all tests (unit + integration) 
+cargo test -- --test-threads=1
+
+# Quick functionality test (builds and tests basic proxying)
+./quick-test.sh
+
+# Automated comprehensive test suite (builds, starts services, runs tests)
+./test-local.py
+```
+
+#### Manual Integration Testing
+
+```bash
 # Integration testing (Strict Mode)
 export CC_REVERSE_PROXY_IPS="127.0.0.1"
 ./target/release/wisegate -l 8080 -f 9000 &
