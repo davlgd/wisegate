@@ -182,12 +182,16 @@ async fn forward_with_reqwest(
         "HEAD" => client.head(&destination_uri),
         "PATCH" => client.patch(&destination_uri),
         "OPTIONS" => client.request(reqwest::Method::OPTIONS, &destination_uri),
-        "TRACE" => client.request(reqwest::Method::TRACE, &destination_uri),
-        "CONNECT" => client.request(reqwest::Method::CONNECT, &destination_uri),
-        _ => return Ok(create_error_response(
-            StatusCode::METHOD_NOT_ALLOWED,
-            "HTTP method not supported"
-        )),
+        method => {
+            // Try to parse custom methods
+            match reqwest::Method::from_bytes(method.as_bytes()) {
+                Ok(custom_method) => client.request(custom_method, &destination_uri),
+                Err(_) => return Ok(create_error_response(
+                    StatusCode::METHOD_NOT_ALLOWED,
+                    "HTTP method not supported"
+                )),
+            }
+        }
     };
 
     // Add headers (excluding host and content-length)
