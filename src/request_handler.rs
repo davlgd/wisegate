@@ -69,10 +69,9 @@ pub async fn handle_request(
     // Add X-Real-IP header for upstream service (only if we have a real IP)
     let mut req = req;
     if real_client_ip != "unknown" {
-        req.headers_mut().insert(
-            "x-real-ip",
-            real_client_ip.parse().unwrap()
-        );
+        if let Ok(header_value) = real_client_ip.parse() {
+            req.headers_mut().insert("x-real-ip", header_value);
+        }
     }
 
     // Forward request with streaming support
@@ -221,13 +220,17 @@ async fn forward_with_reqwest(
                         .body(Full::new(body_bytes))
                         .unwrap();
 
-                    // Copy headers
+                    // Copy response headers (skip hop-by-hop headers)
                     for (name, value) in headers.iter() {
-                        if let (Ok(header_name), Ok(header_value)) = (
-                            hyper::header::HeaderName::from_bytes(name.as_str().as_bytes()),
-                            hyper::header::HeaderValue::from_bytes(value.as_bytes())
-                        ) {
-                            hyper_response.headers_mut().insert(header_name, header_value);
+                        let header_name = name.as_str().to_lowercase();
+                        // Skip hop-by-hop headers that shouldn't be forwarded
+                        if !is_hop_by_hop_header(&header_name) {
+                            if let (Ok(hyper_name), Ok(hyper_value)) = (
+                                hyper::header::HeaderName::from_bytes(name.as_str().as_bytes()),
+                                hyper::header::HeaderValue::from_bytes(value.as_bytes())
+                            ) {
+                                hyper_response.headers_mut().insert(hyper_name, hyper_value);
+                            }
                         }
                     }
 
@@ -239,10 +242,25 @@ async fn forward_with_reqwest(
                 ))
             }
         }
-        Err(_) => Ok(create_error_response(
-            StatusCode::BAD_GATEWAY,
-            "Destination service unavailable"
-        ))
+        Err(err) => {
+            // More specific error handling
+            if err.is_timeout() {
+                Ok(create_error_response(
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "Upstream service timeout"
+                ))
+            } else if err.is_connect() {
+                Ok(create_error_response(
+                    StatusCode::BAD_GATEWAY,
+                    "Could not connect to upstream service"
+                ))
+            } else {
+                Ok(create_error_response(
+                    StatusCode::BAD_GATEWAY,
+                    "Upstream service error"
+                ))
+            }
+        }
     }
 }
 
@@ -265,4 +283,12 @@ fn is_url_pattern_blocked(path: &str) -> bool {
 fn is_method_blocked(method: &str) -> bool {
     let blocked_methods = config::get_blocked_methods();
     blocked_methods.iter().any(|blocked_method| blocked_method == &method.to_uppercase())
+}
+
+/// Check if a header is a hop-by-hop header that shouldn't be forwarded
+fn is_hop_by_hop_header(header_name: &str) -> bool {
+    matches!(header_name, 
+        "connection" | "keep-alive" | "proxy-authenticate" | "proxy-authorization" |
+        "te" | "trailers" | "transfer-encoding" | "upgrade"
+    )
 }
