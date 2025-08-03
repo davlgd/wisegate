@@ -4,7 +4,12 @@ use std::time::Duration;
 use crate::env_vars;
 use crate::types::{ProxyConfig, RateLimitConfig};
 
-/// Configuration management module
+// Default values
+const DEFAULT_RATE_LIMIT_REQUESTS: u32 = 100;
+const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
+const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
+
 /// Get rate limiting configuration from environment variables
 pub fn get_rate_limit_config() -> RateLimitConfig {
     let max_requests = env::var(env_vars::RATE_LIMIT_REQUESTS)
