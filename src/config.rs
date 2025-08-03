@@ -30,16 +30,17 @@ where
 }
 
 /// Get rate limiting configuration from environment variables
+/// Invalid values fall back to defaults and log warnings
 pub fn get_rate_limit_config() -> RateLimitConfig {
-    let max_requests = env::var(env_vars::RATE_LIMIT_REQUESTS)
-        .unwrap_or_else(|_| "100".to_string())
-        .parse()
-        .unwrap_or(100);
+    let max_requests = parse_env_var_or_default(
+        env_vars::RATE_LIMIT_REQUESTS,
+        DEFAULT_RATE_LIMIT_REQUESTS,
+    );
 
-    let window_secs = env::var(env_vars::RATE_LIMIT_WINDOW_SECS)
-        .unwrap_or_else(|_| "60".to_string())
-        .parse()
-        .unwrap_or(60);
+    let window_secs = parse_env_var_or_default(
+        env_vars::RATE_LIMIT_WINDOW_SECS,
+        DEFAULT_RATE_LIMIT_WINDOW_SECS,
+    );
 
     RateLimitConfig {
         max_requests,
@@ -48,21 +49,22 @@ pub fn get_rate_limit_config() -> RateLimitConfig {
 }
 
 /// Get proxy configuration from environment variables
+/// Invalid values fall back to defaults and log warnings
 pub fn get_proxy_config() -> ProxyConfig {
-    let timeout_secs = env::var(env_vars::PROXY_TIMEOUT_SECS)
-        .unwrap_or_else(|_| "30".to_string())
-        .parse()
-        .unwrap_or(30);
+    let timeout_secs = parse_env_var_or_default(
+        env_vars::PROXY_TIMEOUT_SECS,
+        DEFAULT_PROXY_TIMEOUT_SECS,
+    );
 
-    let max_body_mb = env::var(env_vars::MAX_BODY_SIZE_MB)
-        .unwrap_or_else(|_| "100".to_string())
-        .parse()
-        .unwrap_or(100);
+    let max_body_mb = parse_env_var_or_default(
+        env_vars::MAX_BODY_SIZE_MB,
+        DEFAULT_MAX_BODY_SIZE_MB,
+    );
 
-    let enable_streaming = env::var(env_vars::ENABLE_STREAMING)
-        .unwrap_or_else(|_| "true".to_string())
-        .parse()
-        .unwrap_or(true);
+    let enable_streaming = parse_env_var_or_default(
+        env_vars::ENABLE_STREAMING,
+        true,
+    );
 
     ProxyConfig {
         timeout: Duration::from_secs(timeout_secs),
