@@ -1,4 +1,5 @@
-use crate::{args::Args, config};
+use crate::{args::Args, config, env_vars};
+use std::env;
 
 /// Print startup banner with configuration
 pub fn print_startup_info(args: &Args) {
@@ -30,6 +31,34 @@ pub fn print_startup_info(args: &Args) {
         println!("   Blocked IPs:    {blocked_count} configured");
     }
 
+    // Show environment configuration in verbose mode
+    if args.verbose {
+        print_env_config();
+    }
+
     println!();
     println!("🚀 Server starting...");
+}
+
+/// Print environment variable configuration status (used in verbose mode)
+fn print_env_config() {
+    println!();
+    println!("🔧 Environment Variables:");
+    
+    for &var_name in env_vars::all_env_vars() {
+        match env::var(var_name) {
+            Ok(value) => {
+                // Mask sensitive values
+                let display_value = if var_name.contains("IP") || var_name.contains("PROXY") {
+                    "[CONFIGURED]".to_string()
+                } else {
+                    value
+                };
+                println!("   {:<25} = {}", var_name, display_value);
+            }
+            Err(_) => {
+                println!("   {:<25} = [NOT SET]", var_name);
+            }
+        }
+    }
 }
