@@ -79,7 +79,7 @@ pub fn get_proxy_config() -> ProxyConfig {
 
     let config = ProxyConfig {
         timeout: Duration::from_secs(timeout_secs),
-        max_body_size: if max_body_mb == 0 { 0 } else { max_body_mb * 1024 * 1024 }, // Convert MB to bytes
+        max_body_size: ProxyConfig::mb_to_bytes(max_body_mb),
         enable_streaming,
     };
 
@@ -88,7 +88,7 @@ pub fn get_proxy_config() -> ProxyConfig {
         eprintln!("⚠️  Invalid proxy configuration, using defaults");
         return ProxyConfig {
             timeout: Duration::from_secs(DEFAULT_PROXY_TIMEOUT_SECS),
-            max_body_size: DEFAULT_MAX_BODY_SIZE_MB * 1024 * 1024,
+            max_body_size: ProxyConfig::mb_to_bytes(DEFAULT_MAX_BODY_SIZE_MB),
             enable_streaming: true,
         };
     }

@@ -35,8 +35,13 @@ impl ProxyConfig {
         if self.max_body_size == 0 {
             "unlimited".to_string()
         } else {
-            format!("{}", self.max_body_size / 1024 / 1024)
+            (self.max_body_size / 1024 / 1024).to_string()
         }
+    }
+
+    /// Convert MB to bytes for internal use
+    pub fn mb_to_bytes(mb: usize) -> usize {
+        if mb == 0 { 0 } else { mb * 1024 * 1024 }
     }
 }
 
