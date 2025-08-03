@@ -7,10 +7,10 @@ use clap::Parser;
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(author = env!("CARGO_PKG_AUTHORS"))]
 #[command(
-    long_about = "A high-performance, secure reverse proxy with built-in rate limiting and IP filtering.\n\nExample usage:\n  wisegate --listen 8080 --forward 9000\n  wisegate -l 8080 -f 9000 --verbose"
+    long_about = "🧙‍ \"You shall not pass!\" - A wise guardian for your network gates\nAn efficient, secure reverse proxy with built-in rate limiting and IP filtering\n\nExample usage:\n  wisegate --listen 8080 --forward 9000\n  wisegate -l 8080 -f 9000 --verbose"
 )]
 #[command(
-    after_help = "Environment variables:\n  CC_REVERSE_PROXY_IPS   Trusted proxy IPs (enables strict mode)\n  BLOCKED_IPS            Comma-separated blocked client IPs\n  BLOCKED_METHODS        HTTP methods to block (e.g., PUT,DELETE)\n  BLOCKED_PATTERNS       URL patterns to block (e.g., .php,.yaml)\n  RATE_LIMIT_REQUESTS    Max requests per window (default: 100)\n  RATE_LIMIT_WINDOW_SECS Rate limit window seconds (default: 60)\n\nFor more configuration options, see the documentation."
+    after_help = "Environment variables:\n  CC_REVERSE_PROXY_IPS   Trusted proxy IPs (enables strict mode)\n  BLOCKED_IPS            Comma-separated blocked client IPs\n  BLOCKED_METHODS        HTTP methods to block (e.g., PUT,DELETE)\n  BLOCKED_PATTERNS       URL patterns to block (e.g., .php,.yaml)\n  RATE_LIMIT_REQUESTS    Max requests per window (default: 100)\n  RATE_LIMIT_WINDOW_SECS Rate limit window seconds (default: 60)\n\nFor more configuration options, see https://crates.io/crates/wisegate"
 )]
 pub struct Args {
     /// Port to listen on for incoming requests

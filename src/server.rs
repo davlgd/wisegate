@@ -6,7 +6,7 @@ pub fn print_startup_info(args: &Args) {
     if args.quiet {
         // Quiet mode: only essential information
         println!(
-            "🚀 WiseGate v{} starting on port {}",
+            "🧙‍♂️ WiseGate v{} standing watch on port {}",
             env!("CARGO_PKG_VERSION"),
             args.listen
         );
@@ -15,11 +15,11 @@ pub fn print_startup_info(args: &Args) {
 
     // Normal/verbose mode: full configuration display
     println!(
-        "🛡️  {} v{}",
+        "🧙‍ {} v{} - Guardian of the Gates",
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION")
     );
-    println!("   {}", env!("CARGO_PKG_DESCRIPTION"));
+    println!("   \"You shall not pass!\" - A wise reverse proxy standing watch");
     println!();
     println!("📡 Network Configuration:");
     println!("   Listen Port:    {}", args.listen);
@@ -51,7 +51,7 @@ pub fn print_startup_info(args: &Args) {
     }
 
     println!();
-    println!("🚀 Server starting...");
+    println!("🛡️ The guardian takes his post... Server starting!");
 }
 
 /// Print security configuration summary

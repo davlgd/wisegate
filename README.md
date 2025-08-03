@@ -1,15 +1,17 @@
 # 🛡️ WiseGate
 
-A high-performance, secure reverse proxy written in Rust with built-in rate limiting and IP filtering capabilities.
+*"You shall not pass!"* - A wise guardian for your network gates.
+
+An efficient, secure reverse proxy written in Rust with built-in rate limiting and IP filtering capabilities.
 
 ## ✨ Features
 
-- **🚀 Ultra-Fast**: ~2MB binary (1 MB after upx)
-- **🔒 Secure**: Validates load balancer headers and enforces proxy IP allowlists
+- **🚀 Efficient & Compact**: ~2MB binary (1 MB after upx)
+- **🔒 Guardian of the Gates**: Validates load balancer headers and enforces proxy IP allowlists
 - **📊 Rate Limiting**: Per-IP rate limiting with configurable sliding windows
-- **🚫 IP Filtering**: Block malicious IPs with environment-based configuration
+- **🚫 Vigilant Watchkeeper**: Block malicious IPs with environment-based configuration
 - **🚫 HTTP Method Filtering**: Block specific HTTP methods (GET, POST, PUT, etc.)
-- **🛡️ URL Pattern Blocking**: Block requests containing specific patterns (e.g., `.ext`, `/path/to/block`)
+- **🛡️ Path Guardian**: Block requests containing specific patterns (e.g., `.ext`, `/path/to/block`) - none shall pass without permission
 - **🌐 Real IP Extraction**: Correctly extracts client IPs from `x-forwarded-for` and `forwarded` headers
 - **⚙️ Zero Dependencies**: Statically compiled binary with no external runtime requirements
 
@@ -58,7 +60,7 @@ export CC_REVERSE_PROXY_IPS="192.168.1.100,10.0.0.1"
 wisegate --listen 8080 --forward 9000
 ```
 
-Your service is now protected! Requests will be forwarded from port 8080 to port 9000 with added security.
+Your service is now under the protection of WiseGate! Requests will be forwarded from port 8080 to port 9000, with only the worthy passing through.
 
 ### CLI Options
 
@@ -138,44 +140,46 @@ wisegate -l 8080 -f 9000
 
 ### Security Model
 
-WiseGate operates in two modes depending on configuration:
+WiseGate operates in two modes depending on configuration, standing watch like a wise guardian at the gates:
 
 **All modes provide:**
-- **HTTP Method Filtering**: Blocks requests using blacklisted HTTP methods (returns 405)
-- **URL Pattern Filtering**: Blocks URLs containing configured patterns (returns 404)
+- **HTTP Method Filtering**: "You cannot pass with that method!" - Blocks requests using blacklisted HTTP methods (returns 405)
+- **URL Pattern Filtering**: "These paths are forbidden!" - Blocks URLs containing configured patterns (returns 404)
 
 #### Permissive Mode (when no proxy IPs are configured)
+*"I will be merciful, but watchful..."*
 
-Additionally provides:
+Additionally, provides:
 
 - **Best-Effort IP Extraction**: Attempts to extract client IP from available headers
 - **Limited IP Features**: IP filtering and rate limiting are disabled when client IP cannot be determined
 - **Conditional Header Injection**: Adds `X-Real-IP` header only when client IP is available
 
 #### Strict Mode (when proxy IPs are configured)
+*"None shall pass without proper credentials!"*
 
-Additionally provides:
+Additionally, provides:
 
 - **Header Validation**: Requires both `x-forwarded-for` and `forwarded` headers
 - **Proxy Authentication**: Validates the proxy IP (from `by=` field) against allow list
 - **Real IP Extraction**: Extracts actual client IP from forwarded headers
-- **IP Filtering**: Blocks requests from blacklisted IPs
-- **Rate Limiting**: Applies per-IP rate limiting with sliding windows
+- **IP Filtering**: "You are not welcome here!" - Blocks requests from blacklisted IPs
+- **Rate Limiting**: "Slow down, traveler!" - Applies per-IP rate limiting with sliding windows
 - **Header Injection**: Adds `X-Real-IP` header for upstream services
 
 ### Request Flow
 
 ```
-Client → Load Balancer → WiseGate → Your Service
+Client → Load Balancer → 🧙‍♂️ WiseGate → Your Service
                                ↓
-                        ✅ Validate headers (strict mode)
-                        ✅ Check Trusted Proxy IPs allowlist (strict mode)
-                        ✅ Check HTTP methods
-                        ✅ Check URL patterns
-                        ✅ Extract real client IP (if detected)
-                        ✅ Check IP blocklist (if IP is detected)
-                        ✅ Apply rate limiting (if IP is detected)
-                        ✅ Add X-Real-IP header (if IP is detected)
+                        🔍 "Who seeks to pass?" - Validate headers (strict mode)
+                        🛡️ "Are you a trusted messenger?" - Check Proxy IPs allowlist (strict mode)
+                        ⚔️ "What is your method?" - Check HTTP methods
+                        🗺️ "Where do you wish to go?" - Check URL patterns
+                        👁️ "I see you..." - Extract real client IP (if detected)
+                        🚫 "You are banished!" - Check IP blocklist (if IP is detected)
+                        ⏱️ "Patience, friend..." - Apply rate limiting (if IP is detected)
+                        📋 "Here are your papers" - Add X-Real-IP header (if IP is detected)
 ```
 
 ### Example Headers
@@ -193,7 +197,7 @@ forwarded: for=203.0.113.1:45678;by=192.168.1.100;proto=https
 x-real-ip: 203.0.113.1
 ```
 
-## ⚡ Performance Features
+## ⚡ Advanced Features
 
 ### Request Timeouts
 - **Configurable**: Set custom timeouts with `PROXY_TIMEOUT_SECS`
@@ -242,7 +246,7 @@ cargo test --lib
 # Run integration tests (comprehensive test suite)
 cargo test --test comprehensive_integration_tests -- --test-threads=1
 
-# Run all tests (unit + integration) 
+# Run all tests (unit + integration)
 cargo test -- --test-threads=1
 
 # Quick functionality test (builds and tests basic proxying)
@@ -297,7 +301,7 @@ src/
 - **`request_handler.rs`**: HTTP request/response processing and forwarding
 - **`server.rs`**: Startup banner and server utility functions
 
-This modular structure ensures each component has a single responsibility, making the codebase easy to understand, test, and maintain.
+This modular structure ensures each component has a single responsibility, making the codebase as organized as the wisdom of ages - easy to understand, test, and maintain.
 
 ## 📝 License
 
@@ -309,8 +313,10 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 - [Tokio](https://tokio.rs/) for async runtime
 - [Clap](https://clap.rs/) for CLI parsing
 - [Reqwest](https://docs.rs/reqwest/) for HTTP client functionality
-- Inspired by the need for a lightweight, simple, secure proxy
+- Inspired by the wisdom of guardians who know when to let pass and when to stand firm
 
 ---
 
-**Made with ❤️ and ⚡ for the Open Source Community**
+**Made with ❤️ and ancient wisdom ⚡ for the Open Source Community**
+
+*"All we have to decide is what to do with the traffic that is given to us."*
