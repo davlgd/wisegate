@@ -42,10 +42,21 @@ pub fn get_rate_limit_config() -> RateLimitConfig {
         DEFAULT_RATE_LIMIT_WINDOW_SECS,
     );
 
-    RateLimitConfig {
+    let config = RateLimitConfig {
         max_requests,
         window_duration: Duration::from_secs(window_secs),
+    };
+
+    // Validate configuration
+    if !config.is_valid() {
+        eprintln!("⚠️  Invalid rate limit configuration, using defaults");
+        return RateLimitConfig {
+            max_requests: DEFAULT_RATE_LIMIT_REQUESTS,
+            window_duration: Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+        };
     }
+
+    config
 }
 
 /// Get proxy configuration from environment variables
@@ -66,11 +77,23 @@ pub fn get_proxy_config() -> ProxyConfig {
         true,
     );
 
-    ProxyConfig {
+    let config = ProxyConfig {
         timeout: Duration::from_secs(timeout_secs),
         max_body_size: if max_body_mb == 0 { 0 } else { max_body_mb * 1024 * 1024 }, // Convert MB to bytes
         enable_streaming,
+    };
+
+    // Validate configuration
+    if !config.is_valid() {
+        eprintln!("⚠️  Invalid proxy configuration, using defaults");
+        return ProxyConfig {
+            timeout: Duration::from_secs(DEFAULT_PROXY_TIMEOUT_SECS),
+            max_body_size: DEFAULT_MAX_BODY_SIZE_MB * 1024 * 1024,
+            enable_streaming: true,
+        };
     }
+
+    config
 }
 
 /// Get list of allowed proxy IPs from environment
