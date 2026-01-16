@@ -1,6 +1,4 @@
-//! WiseGate - A wise guardian for your network gates
-//!
-//! An efficient, secure reverse proxy with built-in rate limiting and IP filtering.
+//! WiseGate binary entry point
 
 #![forbid(unsafe_code)]
 
@@ -18,16 +16,8 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-mod args;
-mod config;
-mod env_vars;
-mod ip_filter;
-mod rate_limiter;
-mod request_handler;
-mod server;
-mod types;
-
-use args::Args;
+use wisegate::args::Args;
+use wisegate::{request_handler, server};
 
 /// Graceful shutdown timeout in seconds
 const SHUTDOWN_TIMEOUT_SECS: u64 = 30;
