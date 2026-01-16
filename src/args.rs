@@ -1,6 +1,49 @@
+//! Command line argument parsing for WiseGate.
+//!
+//! This module defines the CLI interface using [`clap`] for argument parsing.
+//! It provides configuration for binding addresses, ports, and output verbosity.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use wisegate::args::Args;
+//! use clap::Parser;
+//!
+//! let args = Args::parse();
+//! if let Err(e) = args.validate() {
+//!     eprintln!("Configuration error: {}", e);
+//!     std::process::exit(1);
+//! }
+//! ```
+
 use clap::Parser;
 
-/// Command line arguments for WiseGate
+/// Command line arguments for WiseGate.
+///
+/// This struct defines all CLI options available for configuring the reverse proxy.
+/// Arguments can be provided via command line flags or environment variables.
+///
+/// # Fields
+///
+/// * `bind` - Address to bind for listening and forwarding (default: "0.0.0.0")
+/// * `listen` - Port to listen on for incoming requests
+/// * `forward` - Port to forward requests to
+/// * `verbose` - Enable detailed configuration output
+/// * `quiet` - Suppress non-essential output (conflicts with verbose)
+/// * `json_logs` - Output logs in JSON format for structured logging
+///
+/// # Example
+///
+/// ```no_run
+/// use wisegate::args::Args;
+/// use clap::Parser;
+///
+/// // Parse from command line
+/// let args = Args::parse();
+///
+/// println!("Listening on {}:{}", args.bind, args.listen);
+/// println!("Forwarding to {}:{}", args.bind, args.forward);
+/// ```
 #[derive(Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(about = env!("CARGO_PKG_DESCRIPTION"))]
@@ -64,7 +107,32 @@ pub struct Args {
 }
 
 impl Args {
-    /// Validate the parsed arguments
+    /// Validates the parsed command line arguments.
+    ///
+    /// Performs the following validations:
+    /// - Listen and forward ports must be different
+    /// - Both ports must be greater than 0
+    /// - Bind address must be a valid IP address
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If all arguments are valid
+    /// * `Err(String)` - A descriptive error message if validation fails
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use wisegate::args::Args;
+    /// use clap::Parser;
+    ///
+    /// // Simulating args with same listen and forward ports
+    /// let args = Args::try_parse_from(["wisegate", "-l", "8080", "-f", "8080"]).unwrap();
+    /// assert!(args.validate().is_err());
+    ///
+    /// // Valid configuration
+    /// let args = Args::try_parse_from(["wisegate", "-l", "8080", "-f", "9000"]).unwrap();
+    /// assert!(args.validate().is_ok());
+    /// ```
     pub fn validate(&self) -> Result<(), String> {
         if self.listen == self.forward {
             return Err("Listen and forward ports cannot be the same".to_string());

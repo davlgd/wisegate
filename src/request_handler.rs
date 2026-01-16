@@ -1,3 +1,23 @@
+//! HTTP request handling and proxying.
+//!
+//! This module contains the core request handling logic for the reverse proxy,
+//! including IP validation, rate limiting, URL pattern blocking, and request forwarding.
+//!
+//! # Architecture
+//!
+//! The request handling flow:
+//! 1. Extract and validate client IP from proxy headers
+//! 2. Check if IP is blocked
+//! 3. Check for blocked URL patterns
+//! 4. Check for blocked HTTP methods
+//! 5. Apply rate limiting
+//! 6. Forward request to upstream service
+//!
+//! # Connection Pooling
+//!
+//! The module uses a shared [`reqwest::Client`] for HTTP connection pooling,
+//! configured with a timeout and up to 32 idle connections per host.
+
 use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, StatusCode, body::Incoming};
 use once_cell::sync::Lazy;
@@ -7,8 +27,11 @@ use crate::config;
 use crate::types::RateLimiter;
 use crate::{ip_filter, rate_limiter};
 
-/// Shared HTTP client for connection pooling and reuse
-/// The client is configured once at startup and reused for all requests
+/// Shared HTTP client for connection pooling and reuse.
+///
+/// The client is configured once at startup with:
+/// - Timeout from proxy configuration
+/// - Maximum 32 idle connections per host
 static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     let proxy_config = config::get_proxy_config();
     reqwest::Client::builder()
@@ -18,7 +41,33 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .unwrap_or_else(|_| reqwest::Client::new())
 });
 
-/// HTTP request handler with streaming support and improved error handling
+/// Handles an incoming HTTP request through the proxy pipeline.
+///
+/// This is the main entry point for request processing. It performs:
+/// - Client IP extraction and validation from proxy headers
+/// - IP blocking checks
+/// - URL pattern blocking (e.g., `.php`, `.env` files)
+/// - HTTP method blocking (e.g., `PUT`, `DELETE`)
+/// - Rate limiting per client IP
+/// - Request forwarding to the upstream service
+///
+/// # Arguments
+///
+/// * `req` - The incoming HTTP request
+/// * `forward_host` - The upstream host to forward requests to
+/// * `forward_port` - The upstream port to forward requests to
+/// * `limiter` - The shared rate limiter instance
+///
+/// # Returns
+///
+/// Always returns `Ok` with either:
+/// - A successful proxied response from upstream
+/// - An error response (403, 404, 405, 429, 502, etc.)
+///
+/// # Security
+///
+/// In strict mode (when `CC_REVERSE_PROXY_IPS` is configured), requests
+/// without valid proxy headers are rejected with 403 Forbidden.
 pub async fn handle_request(
     req: Request<Incoming>,
     forward_host: String,
@@ -243,8 +292,30 @@ async fn forward_with_reqwest(
     }
 }
 
-/// Create standardized error responses
-/// Falls back to a minimal 500 response if building fails (should never happen with valid StatusCode)
+/// Creates a standardized error response.
+///
+/// Builds an HTTP response with the given status code and plain text message.
+/// Falls back to a minimal 500 response if building fails (should never happen
+/// with valid StatusCode).
+///
+/// # Arguments
+///
+/// * `status` - The HTTP status code for the response
+/// * `message` - The plain text error message body
+///
+/// # Returns
+///
+/// An HTTP response with `content-type: text/plain` header.
+///
+/// # Example
+///
+/// ```
+/// use wisegate::request_handler::create_error_response;
+/// use hyper::StatusCode;
+///
+/// let response = create_error_response(StatusCode::NOT_FOUND, "Resource not found");
+/// assert_eq!(response.status(), StatusCode::NOT_FOUND);
+/// ```
 pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full<bytes::Bytes>> {
     Response::builder()
         .status(status)

@@ -1,8 +1,36 @@
+//! Server startup and information display.
+//!
+//! This module handles the startup banner and configuration display
+//! for the WiseGate reverse proxy.
+
 use crate::{args::Args, config, env_vars};
 use std::env;
 use tracing::{debug, info};
 
-/// Print startup banner with configuration
+/// Prints the startup banner with current configuration.
+///
+/// Displays information about the server's configuration including:
+/// - Version and binding information
+/// - Rate limiting settings
+/// - Proxy configuration (timeout, max body size)
+/// - Security settings (IP filtering, blocked methods/patterns)
+///
+/// In verbose mode, also displays all environment variable configurations.
+///
+/// # Arguments
+///
+/// * `args` - The parsed command line arguments
+///
+/// # Example
+///
+/// ```no_run
+/// use wisegate::args::Args;
+/// use wisegate::server::print_startup_info;
+/// use clap::Parser;
+///
+/// let args = Args::parse();
+/// print_startup_info(&args);
+/// ```
 pub fn print_startup_info(args: &Args) {
     if args.quiet {
         return;
