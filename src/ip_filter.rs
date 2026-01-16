@@ -93,20 +93,17 @@ fn extract_client_ip_from_forwarded(forwarded: &str) -> Option<String> {
         .filter(|ip| is_valid_ip_format(ip))
 }
 
-/// Basic IP format validation (contains . for IPv4 or : for IPv6)
-/// Also validates that it's not empty and doesn't contain invalid characters
+/// Validates IP address format using std::net::IpAddr parsing
+/// Supports both IPv4 and IPv6 addresses, including bracketed IPv6 (e.g., [::1])
 fn is_valid_ip_format(ip: &str) -> bool {
-    if ip.is_empty() || ip.len() > 45 {
-        return false; // Max IPv6 length is 39, add some buffer
+    use std::net::IpAddr;
+
+    if ip.is_empty() {
+        return false;
     }
 
-    // Basic format check
-    let has_valid_format = ip.contains('.') || ip.contains(':');
+    // Handle bracketed IPv6 addresses (e.g., [::1])
+    let ip_to_parse = ip.trim_start_matches('[').trim_end_matches(']');
 
-    // Additional validation: should not contain spaces or other invalid chars
-    let has_invalid_chars = ip
-        .chars()
-        .any(|c| !c.is_ascii_alphanumeric() && !".:[]".contains(c));
-
-    has_valid_format && !has_invalid_chars
+    ip_to_parse.parse::<IpAddr>().is_ok()
 }
