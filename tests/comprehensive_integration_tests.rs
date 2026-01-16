@@ -90,7 +90,7 @@ class TestBackendHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Content-type', 'application/json')
         self.send_header('X-Backend-Server', 'test-backend')
         self.end_headers()
-        
+
         response = {{
             'message': 'Hello from test backend!',
             'method': 'GET',
@@ -99,16 +99,16 @@ class TestBackendHandler(http.server.SimpleHTTPRequestHandler):
             'server': 'test-backend'
         }}
         self.wfile.write(json.dumps(response, indent=2).encode())
-    
+
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length) if content_length > 0 else b''
-        
+
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('X-Backend-Server', 'test-backend')
         self.end_headers()
-        
+
         response = {{
             'message': 'POST received by test backend!',
             'method': 'POST',
@@ -119,14 +119,14 @@ class TestBackendHandler(http.server.SimpleHTTPRequestHandler):
             'server': 'test-backend'
         }}
         self.wfile.write(json.dumps(response, indent=2).encode())
-    
+
     def do_PUT(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.end_headers()
         response = {{'message': 'PUT request received', 'method': 'PUT'}}
         self.wfile.write(json.dumps(response).encode())
-    
+
     def log_message(self, format, *args):
         pass  # Suppress default logging
 
@@ -459,5 +459,160 @@ fn test_timeout_handling() {
     assert!(
         duration < Duration::from_secs(5),
         "Request should complete well within timeout limit"
+    );
+}
+
+#[test]
+fn test_put_request_allowed() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let mut env = TestEnvironment::new();
+    env.setup().expect("Failed to setup test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
+    // PUT should be allowed (not in blocked methods)
+    let (status, body) = make_request(&env, "PUT", "/resource", Some("update data"), None)
+        .expect("Failed to make PUT request");
+
+    assert_eq!(status, 200, "PUT method should be allowed");
+    assert!(body.contains("PUT"), "Response should confirm PUT method");
+}
+
+#[test]
+fn test_delete_request_allowed() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let mut env = TestEnvironment::new();
+    env.setup().expect("Failed to setup test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
+    // DELETE should be allowed (not in blocked methods)
+    let (status, _) =
+        make_request(&env, "DELETE", "/resource/123", None, None).expect("Failed to make request");
+
+    // Note: Our test backend may not handle DELETE, but we should get through WiseGate
+    // Status could be 200 or 501 depending on backend support
+    assert!(
+        status == 200 || status == 501 || status == 405,
+        "DELETE should pass through WiseGate, got status: {}",
+        status
+    );
+}
+
+#[test]
+fn test_url_encoded_bypass_attempt() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let mut env = TestEnvironment::new();
+    env.setup().expect("Failed to setup test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
+    // Try to bypass .env blocking with URL encoding
+    let encoded_paths = &[
+        "/.%65nv",        // .env with 'e' encoded
+        "/%2eenv",        // .env with '.' encoded
+        "/%2e%65%6e%76",  // fully encoded .env
+        "/.git%2fconfig", // .git/config with '/' encoded
+    ];
+
+    for path in encoded_paths {
+        let (status, _) = make_request(&env, "GET", path, None, None)
+            .expect(&format!("Failed to make request to {path}"));
+
+        assert_eq!(
+            status, 404,
+            "URL-encoded path {} should still be blocked",
+            path
+        );
+    }
+}
+
+#[test]
+fn test_multiple_headers_forwarding() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let mut env = TestEnvironment::new();
+    env.setup().expect("Failed to setup test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
+    let headers = &[
+        ("Accept", "application/json"),
+        ("Accept-Language", "en-US,en;q=0.9"),
+        ("User-Agent", "WiseGate-Test/1.0"),
+        ("X-Request-ID", "test-12345"),
+    ];
+
+    let (status, body) = make_request(&env, "GET", "/multi-headers", None, Some(headers))
+        .expect("Failed to make request with multiple headers");
+
+    assert_eq!(status, 200, "Request with multiple headers should succeed");
+
+    // Verify headers are in the response
+    let body_lower = body.to_lowercase();
+    assert!(
+        body_lower.contains("application/json") || body_lower.contains("accept"),
+        "Accept header should be forwarded"
+    );
+}
+
+#[test]
+fn test_empty_body_post() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let mut env = TestEnvironment::new();
+    env.setup().expect("Failed to setup test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
+    // POST with empty body
+    let (status, body) =
+        make_request(&env, "POST", "/empty", Some(""), None).expect("Failed to make empty POST");
+
+    assert_eq!(status, 200, "Empty POST should succeed");
+    assert!(
+        body.contains("\"body_size\": 0"),
+        "Empty body should have size 0"
+    );
+}
+
+#[test]
+fn test_special_characters_in_path() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let mut env = TestEnvironment::new();
+    env.setup().expect("Failed to setup test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
+    // Test paths with special characters (that aren't blocked patterns)
+    let paths = &[
+        "/path/with/slashes",
+        "/path-with-dashes",
+        "/path_with_underscores",
+        "/path.with.dots",
+        "/path%20with%20spaces",
+    ];
+
+    for path in paths {
+        let (status, _) = make_request(&env, "GET", path, None, None)
+            .expect(&format!("Failed to make request to {path}"));
+
+        assert_eq!(status, 200, "Path {} should succeed", path);
+    }
+}
+
+#[test]
+fn test_query_string_forwarding() {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let mut env = TestEnvironment::new();
+    env.setup().expect("Failed to setup test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
+    let (status, body) = make_request(&env, "GET", "/search?q=test&page=1&limit=10", None, None)
+        .expect("Failed to make request with query string");
+
+    assert_eq!(status, 200, "Request with query string should succeed");
+    assert!(
+        body.contains("q=test") || body.contains("search"),
+        "Query string should be forwarded"
     );
 }
