@@ -16,6 +16,7 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use wisegate::args::Args;
+use wisegate::server::StartupConfig;
 use wisegate::types::RateLimiter;
 use wisegate::{config, request_handler, server};
 
@@ -60,7 +61,14 @@ async fn main() {
     // Initialize tracing before any logging
     init_tracing(args.verbose, args.quiet, args.json_logs);
 
-    server::print_startup_info(&args);
+    let startup_config = StartupConfig {
+        listen_port: args.listen,
+        forward_port: args.forward,
+        bind_address: args.bind.clone(),
+        verbose: args.verbose,
+        quiet: args.quiet,
+    };
+    server::print_startup_info(&startup_config);
 
     // Initialize rate limiter
     let rate_limiter = RateLimiter::new();

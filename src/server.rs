@@ -3,9 +3,27 @@
 //! This module handles the startup banner and configuration display
 //! for the WiseGate reverse proxy.
 
-use crate::{args::Args, config, env_vars};
+use crate::{config, env_vars};
 use std::env;
 use tracing::{debug, info};
+
+/// Configuration for startup display.
+///
+/// Decouples the startup info display from CLI argument parsing,
+/// allowing the server module to be used independently.
+#[derive(Clone, Debug)]
+pub struct StartupConfig {
+    /// Port to listen on
+    pub listen_port: u16,
+    /// Port to forward to
+    pub forward_port: u16,
+    /// Bind address
+    pub bind_address: String,
+    /// Whether to show verbose output
+    pub verbose: bool,
+    /// Whether to suppress output
+    pub quiet: bool,
+}
 
 /// Prints the startup banner with current configuration.
 ///
@@ -19,20 +37,24 @@ use tracing::{debug, info};
 ///
 /// # Arguments
 ///
-/// * `args` - The parsed command line arguments
+/// * `config` - The startup configuration
 ///
 /// # Example
 ///
 /// ```no_run
-/// use wisegate::args::Args;
-/// use wisegate::server::print_startup_info;
-/// use clap::Parser;
+/// use wisegate::server::{print_startup_info, StartupConfig};
 ///
-/// let args = Args::parse();
-/// print_startup_info(&args);
+/// let config = StartupConfig {
+///     listen_port: 8080,
+///     forward_port: 9000,
+///     bind_address: "0.0.0.0".to_string(),
+///     verbose: false,
+///     quiet: false,
+/// };
+/// print_startup_info(&config);
 /// ```
-pub fn print_startup_info(args: &Args) {
-    if args.quiet {
+pub fn print_startup_info(startup_config: &StartupConfig) {
+    if startup_config.quiet {
         return;
     }
 
@@ -45,9 +67,9 @@ pub fn print_startup_info(args: &Args) {
 
     info!(
         version = env!("CARGO_PKG_VERSION"),
-        listen_port = args.listen,
-        forward_port = args.forward,
-        bind_address = %args.bind,
+        listen_port = startup_config.listen_port,
+        forward_port = startup_config.forward_port,
+        bind_address = %startup_config.bind_address,
         "WiseGate starting"
     );
 
@@ -80,7 +102,7 @@ pub fn print_startup_info(args: &Args) {
     );
 
     // Show environment configuration in verbose mode
-    if args.verbose {
+    if startup_config.verbose {
         print_env_config();
     }
 }
