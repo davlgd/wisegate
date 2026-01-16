@@ -8,7 +8,7 @@ fn test_large_request_handling() {
     // by testing requests that would previously fail due to buffer size limits
 
     let output = Command::new("cargo")
-        .args(&["build", "--release"])
+        .args(["build", "--release"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .expect("Failed to build wisegate");
@@ -20,7 +20,7 @@ fn test_large_request_handling() {
     );
 
     // Start a simple backend server for testing
-    let mut backend = Command::new("python3")
+    let backend = Command::new("python3")
         .arg("-c")
         .arg(
             r#"
@@ -34,7 +34,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
         self.wfile.write(b'Hello from test backend')
-    
+
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length) if content_length > 0 else b''
@@ -57,8 +57,8 @@ with socketserver.TCPServer(('localhost', 9001), Handler) as httpd:
     thread::sleep(Duration::from_secs(2));
 
     // Start wisegate
-    let mut wisegate = Command::new("./target/release/wisegate")
-        .args(&["--listen", "8081", "--forward", "9001"])
+    let wisegate = Command::new("./target/release/wisegate")
+        .args(["--listen", "8081", "--forward", "9001"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -70,7 +70,7 @@ with socketserver.TCPServer(('localhost', 9001), Handler) as httpd:
 
     // Test 1: Simple GET request
     let output = Command::new("curl")
-        .args(&["-X", "GET", "http://localhost:8081/", "--max-time", "10"])
+        .args(["-X", "GET", "http://localhost:8081/", "--max-time", "10"])
         .output()
         .expect("Failed to execute curl");
 
@@ -95,9 +95,13 @@ with socketserver.TCPServer(('localhost', 9001), Handler) as httpd:
         response
     );
 
-    // Clean up
+    // Clean up - properly wait to avoid zombie processes
+    let mut wisegate = wisegate;
+    let mut backend = backend;
     let _ = wisegate.kill();
+    let _ = wisegate.wait();
     let _ = backend.kill();
+    let _ = backend.wait();
 }
 
 #[test]
@@ -107,7 +111,7 @@ fn test_environment_config_isolation() {
 
     for i in 0..5 {
         let output = Command::new("cargo")
-            .args(&["test", "config::tests", "--", "--test-threads=1"])
+            .args(["test", "config::tests", "--", "--test-threads=1"])
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()
             .expect("Failed to run config tests");
