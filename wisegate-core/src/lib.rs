@@ -71,25 +71,36 @@
 //! # Modules
 //!
 //! - [`types`] - Core types and the [`ConfigProvider`] trait
+//! - [`error`] - Error types and result aliases
+//! - [`headers`] - HTTP header constants
 //! - [`ip_filter`] - IP validation, extraction, and filtering
 //! - [`rate_limiter`] - Rate limiting implementation
 //! - [`request_handler`] - HTTP request processing and forwarding
 
 #![forbid(unsafe_code)]
 
+pub mod error;
+pub mod headers;
 pub mod ip_filter;
 pub mod rate_limiter;
 pub mod request_handler;
 pub mod types;
 
 // Re-export commonly used items at crate root
+pub use error::{Result, WiseGateError};
 pub use types::{
-    // Composable configuration traits
-    ConnectionProvider, FilteringProvider, ProxyProvider, RateLimitingProvider,
     // Aggregated configuration trait
     ConfigProvider,
+    // Composable configuration traits
+    ConnectionProvider,
+    FilteringProvider,
     // Configuration structs
-    ProxyConfig, RateLimitCleanupConfig, RateLimitConfig,
+    ProxyConfig,
+    ProxyProvider,
+    RateLimitCleanupConfig,
+    RateLimitConfig,
     // Rate limiting types
-    RateLimitEntry, RateLimiter,
+    RateLimitEntry,
+    RateLimiter,
+    RateLimitingProvider,
 };

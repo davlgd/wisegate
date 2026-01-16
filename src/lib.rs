@@ -58,12 +58,18 @@ pub use config::{
     get_rate_limit_config,
 };
 pub use wisegate_core::{
-    // Composable configuration traits
-    ConnectionProvider, FilteringProvider, ProxyProvider, RateLimitingProvider,
     // Aggregated configuration trait
     ConfigProvider,
+    // Composable configuration traits
+    ConnectionProvider,
+    FilteringProvider,
     // Configuration structs
-    ProxyConfig, RateLimitCleanupConfig, RateLimitConfig,
+    ProxyConfig,
+    ProxyProvider,
+    RateLimitCleanupConfig,
+    RateLimitConfig,
     // Rate limiting types
-    RateLimitEntry, RateLimiter,
+    RateLimitEntry,
+    RateLimiter,
+    RateLimitingProvider,
 };
