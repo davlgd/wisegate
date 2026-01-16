@@ -11,6 +11,16 @@ const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
 
+// Whitelist of allowed environment variable names for proxy IPs
+// This prevents arbitrary environment variable reading via TRUSTED_PROXY_IPS_VAR
+const ALLOWED_PROXY_VAR_NAMES: &[&str] = &[
+    "TRUSTED_PROXY_IPS",
+    "REVERSE_PROXY_IPS",
+    "PROXY_ALLOWLIST",
+    "ALLOWED_PROXY_IPS",
+    "PROXY_IPS",
+];
+
 /// Helper function to parse environment variables with fallback to defaults
 /// Logs warnings for invalid values
 fn parse_env_var_or_default<T>(var_name: &str, default: T) -> T
@@ -102,12 +112,21 @@ where
         }
     }
 
-    // Try user-defined alternative variable if set
+    // Try user-defined alternative variable if set (only from whitelist)
     if let Ok(alt_var_name) = env_var(env_vars::TRUSTED_PROXY_IPS_VAR) {
-        if let Ok(ips) = env_var(&alt_var_name) {
-            if !ips.trim().is_empty() {
-                return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
+        // Security: only allow reading from whitelisted variable names
+        // This prevents arbitrary environment variable disclosure
+        if ALLOWED_PROXY_VAR_NAMES.contains(&alt_var_name.as_str()) {
+            if let Ok(ips) = env_var(&alt_var_name) {
+                if !ips.trim().is_empty() {
+                    return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
+                }
             }
+        } else {
+            eprintln!(
+                "⚠️  Invalid TRUSTED_PROXY_IPS_VAR value '{}': must be one of {:?}",
+                alt_var_name, ALLOWED_PROXY_VAR_NAMES
+            );
         }
     }
 
@@ -178,8 +197,9 @@ mod tests {
     #[test]
     fn test_get_allowed_proxy_ips_with_alternative_var() {
         let mut env_vars = HashMap::new();
-        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "MY_CUSTOM_PROXY_IPS");
-        env_vars.insert("MY_CUSTOM_PROXY_IPS", "172.16.0.1,203.0.113.1");
+        // Use a whitelisted variable name
+        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "TRUSTED_PROXY_IPS");
+        env_vars.insert("TRUSTED_PROXY_IPS", "172.16.0.1,203.0.113.1");
         let env_fn = create_mock_env(env_vars);
 
         let result = get_allowed_proxy_ips_internal(env_fn);
@@ -210,10 +230,10 @@ mod tests {
 
     #[test]
     fn test_get_allowed_proxy_ips_fallback_to_alternative() {
-        // Don't set CC_REVERSE_PROXY_IPS, only alternative
+        // Don't set CC_REVERSE_PROXY_IPS, only alternative (using whitelisted name)
         let mut env_vars = HashMap::new();
-        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "COMPANY_PROXY_LIST");
-        env_vars.insert("COMPANY_PROXY_LIST", "10.1.1.1,10.1.1.2,10.1.1.3");
+        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "PROXY_ALLOWLIST");
+        env_vars.insert("PROXY_ALLOWLIST", "10.1.1.1,10.1.1.2,10.1.1.3");
         let env_fn = create_mock_env(env_vars);
 
         let result = get_allowed_proxy_ips_internal(env_fn);
@@ -224,6 +244,20 @@ mod tests {
         assert_eq!(ips[0], "10.1.1.1");
         assert_eq!(ips[1], "10.1.1.2");
         assert_eq!(ips[2], "10.1.1.3");
+    }
+
+    #[test]
+    fn test_get_allowed_proxy_ips_rejects_non_whitelisted_var() {
+        // Try to use a non-whitelisted variable name - should be rejected
+        let mut env_vars = HashMap::new();
+        env_vars.insert(env_vars::TRUSTED_PROXY_IPS_VAR, "DATABASE_URL");
+        env_vars.insert("DATABASE_URL", "10.1.1.1,10.1.1.2");
+        let env_fn = create_mock_env(env_vars);
+
+        let result = get_allowed_proxy_ips_internal(env_fn);
+
+        // Should return None because DATABASE_URL is not in the whitelist
+        assert!(result.is_none());
     }
 
     #[test]
