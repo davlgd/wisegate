@@ -33,13 +33,14 @@
 //! }
 //! ```
 
-use crate::config;
+use crate::types::ConfigProvider;
 
 /// Checks if an IP address is in the blocked list.
 ///
 /// # Arguments
 ///
 /// * `ip` - The IP address to check
+/// * `config` - Configuration provider for blocked IPs list
 ///
 /// # Returns
 ///
@@ -47,15 +48,13 @@ use crate::config;
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// use wisegate::ip_filter::is_ip_blocked;
 ///
-/// // Assuming BLOCKED_IPS is not set
-/// assert!(!is_ip_blocked("192.168.1.1"));
+/// let blocked = is_ip_blocked("192.168.1.1", &config);
 /// ```
-pub fn is_ip_blocked(ip: &str) -> bool {
-    let blocked_ips = config::get_blocked_ips();
-    blocked_ips.iter().any(|blocked_ip| blocked_ip == ip)
+pub fn is_ip_blocked(ip: &str, config: &impl ConfigProvider) -> bool {
+    config.blocked_ips().iter().any(|blocked_ip| blocked_ip == ip)
 }
 
 /// Extracts and validates the real client IP from request headers.
@@ -74,6 +73,7 @@ pub fn is_ip_blocked(ip: &str) -> bool {
 /// # Arguments
 ///
 /// * `headers` - HTTP request headers
+/// * `config` - Configuration provider for allowed proxy IPs
 ///
 /// # Returns
 ///
@@ -85,10 +85,14 @@ pub fn is_ip_blocked(ip: &str) -> bool {
 /// ```ignore
 /// use wisegate::ip_filter::extract_and_validate_real_ip;
 ///
-/// let client_ip = extract_and_validate_real_ip(&request.headers());
+/// let client_ip = extract_and_validate_real_ip(&request.headers(), &config);
 /// ```
-pub fn extract_and_validate_real_ip(headers: &hyper::HeaderMap) -> Option<String> {
-    let has_proxy_allowlist = config::get_allowed_proxy_ips().is_some();
+pub fn extract_and_validate_real_ip(
+    headers: &hyper::HeaderMap,
+    config: &impl ConfigProvider,
+) -> Option<String> {
+    let allowed_proxy_ips = config.allowed_proxy_ips();
+    let has_proxy_allowlist = allowed_proxy_ips.is_some();
 
     if has_proxy_allowlist {
         // Strict mode: require both headers and validate proxy IP
@@ -96,7 +100,7 @@ pub fn extract_and_validate_real_ip(headers: &hyper::HeaderMap) -> Option<String
         let forwarded = headers.get("forwarded")?.to_str().ok()?;
         let proxy_ip = extract_proxy_ip_from_forwarded(forwarded)?;
 
-        if !is_proxy_ip_allowed(&proxy_ip) {
+        if !is_proxy_ip_allowed(&proxy_ip, allowed_proxy_ips) {
             return None;
         }
 
@@ -142,8 +146,8 @@ fn extract_proxy_ip_from_forwarded(forwarded: &str) -> Option<String> {
 
 /// Check if proxy IP is in the allowed list
 /// If no allowed proxy IPs are configured, allows any proxy IP (returns true)
-fn is_proxy_ip_allowed(proxy_ip: &str) -> bool {
-    match config::get_allowed_proxy_ips() {
+fn is_proxy_ip_allowed(proxy_ip: &str, allowed_proxy_ips: Option<&[String]>) -> bool {
+    match allowed_proxy_ips {
         Some(allowed_ips) => allowed_ips.iter().any(|ip| ip == proxy_ip),
         None => true, // If no allowlist is configured, allow any proxy IP
     }
