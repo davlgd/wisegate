@@ -13,6 +13,16 @@ use clap::Parser;
     after_help = "Environment variables:\n  CC_REVERSE_PROXY_IPS   Trusted proxy IPs (enables strict mode)\n  BLOCKED_IPS            Comma-separated blocked client IPs\n  BLOCKED_METHODS        HTTP methods to block (e.g., PUT,DELETE)\n  BLOCKED_PATTERNS       URL patterns to block (e.g., .php,.yaml)\n  RATE_LIMIT_REQUESTS    Max requests per window (default: 100)\n  RATE_LIMIT_WINDOW_SECS Rate limit window seconds (default: 60)\n\nFor more configuration options, see https://crates.io/crates/wisegate"
 )]
 pub struct Args {
+    /// Address to bind to (for both listening and forwarding)
+    #[arg(
+        long,
+        short = 'b',
+        help = "Bind address for listening and forwarding",
+        value_name = "ADDRESS",
+        default_value = "0.0.0.0"
+    )]
+    pub bind: String,
+
     /// Port to listen on for incoming requests
     #[arg(
         long,
@@ -58,6 +68,11 @@ impl Args {
 
         if self.listen == 0 || self.forward == 0 {
             return Err("Ports must be greater than 0".to_string());
+        }
+
+        // Validate bind address format
+        if self.bind.parse::<std::net::IpAddr>().is_err() {
+            return Err(format!("Invalid bind address: '{}'", self.bind));
         }
 
         Ok(())

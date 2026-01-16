@@ -9,6 +9,7 @@ use crate::{ip_filter, rate_limiter};
 /// HTTP request handler with streaming support and improved error handling
 pub async fn handle_request(
     req: Request<Incoming>,
+    forward_host: String,
     forward_port: u16,
     limiter: RateLimiter,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
@@ -72,12 +73,13 @@ pub async fn handle_request(
     }
 
     // Forward the request
-    forward_request(req, forward_port, &proxy_config).await
+    forward_request(req, &forward_host, forward_port, &proxy_config).await
 }
 
 /// Forward request to upstream service
 async fn forward_request(
     req: Request<Incoming>,
+    host: &str,
     port: u16,
     proxy_config: &crate::types::ProxyConfig,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
@@ -105,19 +107,21 @@ async fn forward_request(
         }
     };
 
-    forward_with_reqwest(parts, body_bytes, port, proxy_config).await
+    forward_with_reqwest(parts, body_bytes, host, port, proxy_config).await
 }
 
 /// Shared forwarding logic using reqwest with timeout support
 async fn forward_with_reqwest(
     parts: hyper::http::request::Parts,
     body_bytes: bytes::Bytes,
+    host: &str,
     port: u16,
     proxy_config: &crate::types::ProxyConfig,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     // Construct destination URI
     let destination_uri = format!(
-        "http://localhost:{}{}",
+        "http://{}:{}{}",
+        host,
         port,
         parts.uri.path_and_query().map_or("", |pq| pq.as_str())
     );
