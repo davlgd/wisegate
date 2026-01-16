@@ -57,7 +57,9 @@ pub async fn handle_request(
     }
 
     // Apply rate limiting (skip if IP is unknown)
-    if real_client_ip != "unknown" && !rate_limiter::check_rate_limit(&limiter, &real_client_ip) {
+    if real_client_ip != "unknown"
+        && !rate_limiter::check_rate_limit(&limiter, &real_client_ip).await
+    {
         return Ok(create_error_response(
             StatusCode::TOO_MANY_REQUESTS,
             "Rate limit exceeded",

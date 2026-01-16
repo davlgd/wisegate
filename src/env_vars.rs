@@ -12,6 +12,8 @@ pub const BLOCKED_PATTERNS: &str = "BLOCKED_PATTERNS";
 /// Rate limiting configuration
 pub const RATE_LIMIT_REQUESTS: &str = "RATE_LIMIT_REQUESTS";
 pub const RATE_LIMIT_WINDOW_SECS: &str = "RATE_LIMIT_WINDOW_SECS";
+pub const RATE_LIMIT_CLEANUP_THRESHOLD: &str = "RATE_LIMIT_CLEANUP_THRESHOLD";
+pub const RATE_LIMIT_CLEANUP_INTERVAL_SECS: &str = "RATE_LIMIT_CLEANUP_INTERVAL_SECS";
 
 /// Proxy behavior configuration
 pub const PROXY_TIMEOUT_SECS: &str = "PROXY_TIMEOUT_SECS";
@@ -27,6 +29,8 @@ pub fn all_env_vars() -> &'static [&'static str] {
         BLOCKED_PATTERNS,
         RATE_LIMIT_REQUESTS,
         RATE_LIMIT_WINDOW_SECS,
+        RATE_LIMIT_CLEANUP_THRESHOLD,
+        RATE_LIMIT_CLEANUP_INTERVAL_SECS,
         PROXY_TIMEOUT_SECS,
         MAX_BODY_SIZE_MB,
     ]

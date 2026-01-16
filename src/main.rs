@@ -4,8 +4,9 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 
 mod args;
 mod config;

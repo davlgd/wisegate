@@ -3,11 +3,13 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use crate::env_vars;
-use crate::types::{ProxyConfig, RateLimitConfig};
+use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
 
 // Default values
 const DEFAULT_RATE_LIMIT_REQUESTS: u32 = 100;
 const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
+const DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD: usize = 10_000;
+const DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS: u64 = 60;
 const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
 
@@ -65,6 +67,25 @@ pub fn get_rate_limit_config() -> RateLimitConfig {
     }
 
     config
+}
+
+/// Get rate limiter cleanup configuration from environment variables
+/// Controls automatic cleanup of expired rate limit entries to prevent memory exhaustion
+pub fn get_rate_limit_cleanup_config() -> RateLimitCleanupConfig {
+    let threshold = parse_env_var_or_default(
+        env_vars::RATE_LIMIT_CLEANUP_THRESHOLD,
+        DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD,
+    );
+
+    let interval_secs = parse_env_var_or_default(
+        env_vars::RATE_LIMIT_CLEANUP_INTERVAL_SECS,
+        DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS,
+    );
+
+    RateLimitCleanupConfig {
+        threshold,
+        interval: Duration::from_secs(interval_secs),
+    }
 }
 
 /// Get proxy configuration from environment variables
