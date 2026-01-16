@@ -346,8 +346,9 @@ fn is_url_pattern_blocked(path: &str) -> bool {
 
 /// Decode URL-encoded string (percent-encoding)
 /// Handles common bypass attempts like %2e for '.', %70 for 'p', etc.
+/// Properly handles multi-byte UTF-8 sequences.
 fn url_decode(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
+    let mut bytes = Vec::with_capacity(input.len());
     let mut chars = input.chars().peekable();
 
     while let Some(c) = chars.next() {
@@ -357,18 +358,21 @@ fn url_decode(input: &str) -> String {
             if hex.len() == 2
                 && let Ok(byte) = u8::from_str_radix(&hex, 16)
             {
-                result.push(byte as char);
+                bytes.push(byte);
                 continue;
             }
             // If decoding failed, keep original characters
-            result.push('%');
-            result.push_str(&hex);
+            bytes.extend_from_slice(b"%");
+            bytes.extend_from_slice(hex.as_bytes());
         } else {
-            result.push(c);
+            // Regular character - encode as UTF-8 bytes
+            let mut buf = [0u8; 4];
+            bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
         }
     }
 
-    result
+    // Convert bytes to string, replacing invalid UTF-8 with replacement character
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 /// Check if HTTP method is blocked
