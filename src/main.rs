@@ -52,11 +52,14 @@ fn init_tracing(verbose: bool, quiet: bool, json_logs: bool) {
 async fn main() {
     let args = Args::parse();
 
-    // Validate arguments
-    if let Err(err) = args.validate() {
-        eprintln!("Configuration error: {err}");
-        std::process::exit(1);
-    }
+    // Validate arguments and get parsed bind IP
+    let bind_ip = match args.validate() {
+        Ok(ip) => ip,
+        Err(err) => {
+            eprintln!("Configuration error: {err}");
+            std::process::exit(1);
+        }
+    };
 
     // Initialize tracing before any logging
     init_tracing(args.verbose, args.quiet, args.json_logs);
@@ -73,14 +76,7 @@ async fn main() {
     // Initialize rate limiter
     let rate_limiter = RateLimiter::new();
 
-    // Bind to address (already validated in args.validate())
-    let bind_ip: std::net::IpAddr = match args.bind.parse() {
-        Ok(ip) => ip,
-        Err(_) => {
-            error!(bind_address = %args.bind, "Invalid bind address");
-            std::process::exit(1);
-        }
-    };
+    // Create socket address (IP already validated)
     let bind_addr = SocketAddr::from((bind_ip, args.listen));
     let listener = match TcpListener::bind(bind_addr).await {
         Ok(listener) => listener,
