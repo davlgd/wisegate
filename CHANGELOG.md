@@ -4,22 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] - 2026-01-16
+## [0.8.0] - 2026-01-17
 
 ### Added
 - **wisegate-core crate**: Extracted reusable library for embedding in other projects
 - **ConfigProvider trait**: Dependency injection for configuration, enabling library reuse
 - **EnvVarConfig**: Default implementation reading from environment variables
-- **Comprehensive unit tests**: 102 tests covering types, ip_filter, rate_limiter, request_handler
+- **WiseGateError**: Custom error type with HTTP status mapping and user-friendly messages
+- **HTTP header constants**: Centralized in `headers.rs` with `is_hop_by_hop()` helper
+- **ConnectionTracker**: Track active connections for graceful shutdown
+- **ConnectionLimiter**: Semaphore-based connection limiting with permit management
+- **Shared TestConfig**: Centralized test configuration in `test_utils.rs` module
+- **Comprehensive unit tests**: 220 tests covering all modules
 
 ### Refactored
 - **Workspace structure**: Split into `wisegate` (CLI) and `wisegate-core` (library)
 - **ip_filter**: Accepts `ConfigProvider` instead of global config
 - **rate_limiter**: Accepts `ConfigProvider` instead of global config
-- **request_handler**: Accepts `ConfigProvider` and HTTP client as parameters
+- **request_handler**: Accepts `ConfigProvider` and HTTP client, uses centralized `headers::is_hop_by_hop()`
+- **main.rs**: Uses `ConnectionTracker` and `ConnectionLimiter` for cleaner connection management
 
 ### Removed
 - **test-local.py**: Removed redundant Python test script (replaced by Rust integration tests)
+- **Duplicated TestConfig**: Consolidated into shared `test_utils.rs` module
+- **Duplicated is_hop_by_hop**: Now uses centralized function from `headers.rs`
 
 ---
 
