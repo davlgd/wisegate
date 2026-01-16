@@ -112,12 +112,7 @@ fn print_env_config() {
     for &var_name in env_vars::all_env_vars() {
         match env::var(var_name) {
             Ok(value) => {
-                // Mask sensitive values
-                let display_value = if var_name.contains("IP") || var_name.contains("PROXY") {
-                    "[CONFIGURED]".to_string()
-                } else {
-                    value
-                };
+                let display_value = mask_sensitive_value(var_name, &value);
                 debug!(name = var_name, value = %display_value, "Environment variable");
             }
             Err(_) => {
@@ -232,14 +227,8 @@ mod tests {
 
     #[test]
     fn test_mask_sensitive_value_non_sensitive() {
-        assert_eq!(
-            mask_sensitive_value("RATE_LIMIT_REQUESTS", "100"),
-            "100"
-        );
-        assert_eq!(
-            mask_sensitive_value("MAX_BODY_SIZE_MB", "50"),
-            "50"
-        );
+        assert_eq!(mask_sensitive_value("RATE_LIMIT_REQUESTS", "100"), "100");
+        assert_eq!(mask_sensitive_value("MAX_BODY_SIZE_MB", "50"), "50");
         assert_eq!(
             mask_sensitive_value("BLOCKED_METHODS", "TRACE,CONNECT"),
             "TRACE,CONNECT"
