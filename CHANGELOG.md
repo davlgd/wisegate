@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-01-16
+
+### Added
+- **ConfigProvider trait**: Dependency injection for configuration, enabling library reuse
+- **EnvVarConfig**: Default implementation reading from environment variables
+
+### Refactored
+- **ip_filter**: Accepts `ConfigProvider` instead of global config
+- **rate_limiter**: Accepts `ConfigProvider` instead of global config
+- **request_handler**: Accepts `ConfigProvider` instead of global config
+- **main**: Uses `EnvVarConfig` for dependency injection
+
+---
+
 ## [0.7.1] - 2026-01-16
 
 ### Refactored
