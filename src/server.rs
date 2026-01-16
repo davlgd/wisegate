@@ -1,100 +1,64 @@
 use crate::{args::Args, config, env_vars};
 use std::env;
+use tracing::{debug, info};
 
 /// Print startup banner with configuration
 pub fn print_startup_info(args: &Args) {
     if args.quiet {
-        // Quiet mode: only essential information
-        println!(
-            "🧙‍♂️ WiseGate v{} standing watch on port {}",
-            env!("CARGO_PKG_VERSION"),
-            args.listen
-        );
         return;
     }
 
-    // Normal/verbose mode: full configuration display
-    println!(
-        "🧙‍ {} v{} - Guardian of the Gates",
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION")
-    );
-    println!("   \"You shall not pass!\" - A wise reverse proxy standing watch");
-    println!();
-    println!("📡 Network Configuration:");
-    println!("   Listen Port:    {}", args.listen);
-    println!("   Forward Port:   {}", args.forward);
-    println!();
-
     let rate_config = config::get_rate_limit_config();
-    println!("⚡ Rate Limiting:");
-    println!(
-        "   Max Requests:   {} per {} seconds",
-        rate_config.max_requests,
-        rate_config.window_duration.as_secs()
-    );
-
     let proxy_config = config::get_proxy_config();
-    println!("🔧 Proxy Configuration:");
-    println!(
-        "   Timeout:        {} seconds",
-        proxy_config.timeout.as_secs()
-    );
-    println!("   Max Body Size:  {} MB", proxy_config.max_body_size_mb());
-
-    // Show security configuration
-    print_security_config();
-
-    // Show environment configuration in verbose mode
-    if args.verbose {
-        print_env_config();
-    }
-
-    println!();
-    println!("🛡️ The guardian takes his post... Server starting!");
-}
-
-/// Print security configuration summary
-fn print_security_config() {
     let allowed_proxy_ips = config::get_allowed_proxy_ips();
     let blocked_ips = config::get_blocked_ips();
     let blocked_methods = config::get_blocked_methods();
     let blocked_patterns = config::get_blocked_patterns();
 
-    println!("🔒 Security Configuration:");
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        listen_port = args.listen,
+        forward_port = args.forward,
+        bind_address = %args.bind,
+        "WiseGate starting"
+    );
 
-    // Proxy mode
-    match allowed_proxy_ips {
-        Some(ips) => println!("   Mode:           Strict (trusted proxies: {})", ips.len()),
-        None => println!("   Mode:           Permissive (no proxy validation)"),
-    }
+    info!(
+        max_requests = rate_config.max_requests,
+        window_secs = rate_config.window_duration.as_secs(),
+        "Rate limiting configured"
+    );
 
-    // IP filtering
-    if !blocked_ips.is_empty() {
-        println!("   Blocked IPs:    {} configured", blocked_ips.len());
-    }
+    info!(
+        timeout_secs = proxy_config.timeout.as_secs(),
+        max_body_mb = proxy_config.max_body_size_mb(),
+        "Proxy configured"
+    );
 
-    // Method filtering
-    if !blocked_methods.is_empty() {
-        println!("   Blocked Methods: {}", blocked_methods.join(", "));
-    }
+    let mode = if allowed_proxy_ips.is_some() {
+        "strict"
+    } else {
+        "permissive"
+    };
+    let trusted_proxies = allowed_proxy_ips.map(|ips| ips.len()).unwrap_or(0);
 
-    // Pattern filtering
-    if !blocked_patterns.is_empty() {
-        println!("   Blocked Patterns: {} configured", blocked_patterns.len());
-    }
+    info!(
+        mode = mode,
+        trusted_proxies = trusted_proxies,
+        blocked_ips = blocked_ips.len(),
+        blocked_methods = blocked_methods.len(),
+        blocked_patterns = blocked_patterns.len(),
+        "Security configured"
+    );
 
-    // If no filtering is configured
-    if blocked_ips.is_empty() && blocked_methods.is_empty() && blocked_patterns.is_empty() {
-        println!("   Filtering:      None configured");
+    // Show environment configuration in verbose mode
+    if args.verbose {
+        print_env_config();
     }
 }
 
 /// Print environment variable configuration status (used in verbose mode)
 fn print_env_config() {
-    println!();
-    println!("🔧 Environment Variables:");
-
     for &var_name in env_vars::all_env_vars() {
         match env::var(var_name) {
             Ok(value) => {
@@ -104,10 +68,10 @@ fn print_env_config() {
                 } else {
                     value
                 };
-                println!("   {var_name:<25} = {display_value}");
+                debug!(name = var_name, value = %display_value, "Environment variable");
             }
             Err(_) => {
-                println!("   {var_name:<25} = [NOT SET]");
+                debug!(name = var_name, value = "[NOT SET]", "Environment variable");
             }
         }
     }

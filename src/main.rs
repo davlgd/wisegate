@@ -15,6 +15,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
+use tracing::{debug, error, info, warn};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 mod args;
 mod config;
@@ -30,15 +32,43 @@ use args::Args;
 /// Graceful shutdown timeout in seconds
 const SHUTDOWN_TIMEOUT_SECS: u64 = 30;
 
+/// Initialize the tracing subscriber for structured logging
+fn init_tracing(verbose: bool, quiet: bool, json_logs: bool) {
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        if quiet {
+            EnvFilter::new("error")
+        } else if verbose {
+            EnvFilter::new("debug")
+        } else {
+            EnvFilter::new("info")
+        }
+    });
+
+    if json_logs {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().json())
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(fmt::layer().with_target(false))
+            .init();
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
 
     // Validate arguments
     if let Err(err) = args.validate() {
-        eprintln!("❌ Configuration error: {err}");
+        eprintln!("Configuration error: {err}");
         std::process::exit(1);
     }
+
+    // Initialize tracing before any logging
+    init_tracing(args.verbose, args.quiet, args.json_logs);
 
     server::print_startup_info(&args);
 
@@ -49,7 +79,7 @@ async fn main() {
     let bind_ip: std::net::IpAddr = match args.bind.parse() {
         Ok(ip) => ip,
         Err(_) => {
-            eprintln!("❌ Invalid bind address: {}", args.bind);
+            error!(bind_address = %args.bind, "Invalid bind address");
             std::process::exit(1);
         }
     };
@@ -57,12 +87,12 @@ async fn main() {
     let listener = match TcpListener::bind(bind_addr).await {
         Ok(listener) => listener,
         Err(err) => {
-            eprintln!("❌ Failed to bind to port {}: {}", args.listen, err);
+            error!(port = args.listen, error = %err, "Failed to bind to port");
             std::process::exit(1);
         }
     };
 
-    println!("✅ WiseGate is running on port {}", args.listen);
+    info!(port = args.listen, bind = %args.bind, "WiseGate is running");
 
     // Track active connections for graceful shutdown
     let active_connections = Arc::new(AtomicUsize::new(0));
@@ -75,21 +105,17 @@ async fn main() {
                 let (stream, addr) = match accept_result {
                     Ok(conn) => conn,
                     Err(err) => {
-                        eprintln!("⚠️  Failed to accept connection: {err}");
+                        warn!(error = %err, "Failed to accept connection");
                         continue;
                     }
                 };
 
-                if args.verbose && !args.quiet {
-                    println!("📡 New connection from {addr}");
-                }
+                debug!(client = %addr, "New connection");
 
                 let io = TokioIo::new(stream);
                 let limiter = rate_limiter.clone();
                 let forward_host = args.bind.clone();
                 let forward_port = args.forward;
-                let verbose = args.verbose;
-                let quiet = args.quiet;
                 let connections = active_connections.clone();
 
                 // Increment active connection count
@@ -100,14 +126,8 @@ async fn main() {
                         request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone())
                     });
 
-                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await
-                        && !quiet
-                    {
-                        if verbose {
-                            eprintln!("⚠️  Connection error from {addr}: {err}");
-                        } else {
-                            eprintln!("⚠️  Connection error: {err}");
-                        }
+                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                        warn!(client = %addr, error = %err, "Connection error");
                     }
 
                     // Decrement active connection count
@@ -117,7 +137,7 @@ async fn main() {
 
             // Wait for shutdown signal (Ctrl+C or SIGTERM)
             _ = shutdown_signal() => {
-                println!("\n🛑 Shutdown signal received, stopping gracefully...");
+                info!("Shutdown signal received, stopping gracefully...");
                 break;
             }
         }
@@ -126,7 +146,7 @@ async fn main() {
     // Graceful shutdown: wait for active connections to finish
     let active = active_connections.load(Ordering::SeqCst);
     if active > 0 {
-        println!("⏳ Waiting for {active} active connection(s) to finish...");
+        info!(active_connections = active, "Waiting for connections to finish...");
 
         let start = std::time::Instant::now();
         let timeout = Duration::from_secs(SHUTDOWN_TIMEOUT_SECS);
@@ -134,14 +154,14 @@ async fn main() {
         while active_connections.load(Ordering::SeqCst) > 0 {
             if start.elapsed() >= timeout {
                 let remaining = active_connections.load(Ordering::SeqCst);
-                eprintln!("⚠️  Timeout reached, forcing shutdown with {remaining} connection(s) still active");
+                warn!(remaining_connections = remaining, "Timeout reached, forcing shutdown");
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 
-    println!("✅ WiseGate stopped cleanly.");
+    info!("WiseGate stopped cleanly");
 }
 
 /// Wait for shutdown signal (SIGINT or SIGTERM)
