@@ -126,3 +126,190 @@ fn print_env_config() {
         }
     }
 }
+
+/// Masks sensitive values in environment variable display.
+///
+/// Returns "[CONFIGURED]" for variables containing "IP" or "PROXY",
+/// otherwise returns the original value.
+fn mask_sensitive_value(var_name: &str, value: &str) -> String {
+    if var_name.contains("IP") || var_name.contains("PROXY") {
+        "[CONFIGURED]".to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===========================================
+    // StartupConfig tests
+    // ===========================================
+
+    #[test]
+    fn test_startup_config_creation() {
+        let config = StartupConfig {
+            listen_port: 8080,
+            forward_port: 9000,
+            bind_address: "0.0.0.0".to_string(),
+            verbose: false,
+            quiet: false,
+        };
+
+        assert_eq!(config.listen_port, 8080);
+        assert_eq!(config.forward_port, 9000);
+        assert_eq!(config.bind_address, "0.0.0.0");
+        assert!(!config.verbose);
+        assert!(!config.quiet);
+    }
+
+    #[test]
+    fn test_startup_config_clone() {
+        let config = StartupConfig {
+            listen_port: 8080,
+            forward_port: 9000,
+            bind_address: "127.0.0.1".to_string(),
+            verbose: true,
+            quiet: false,
+        };
+
+        let cloned = config.clone();
+        assert_eq!(cloned.listen_port, config.listen_port);
+        assert_eq!(cloned.forward_port, config.forward_port);
+        assert_eq!(cloned.bind_address, config.bind_address);
+        assert_eq!(cloned.verbose, config.verbose);
+        assert_eq!(cloned.quiet, config.quiet);
+    }
+
+    #[test]
+    fn test_startup_config_debug() {
+        let config = StartupConfig {
+            listen_port: 8080,
+            forward_port: 9000,
+            bind_address: "0.0.0.0".to_string(),
+            verbose: false,
+            quiet: false,
+        };
+
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("8080"));
+        assert!(debug_str.contains("9000"));
+        assert!(debug_str.contains("0.0.0.0"));
+    }
+
+    // ===========================================
+    // mask_sensitive_value tests
+    // ===========================================
+
+    #[test]
+    fn test_mask_sensitive_value_with_ip() {
+        assert_eq!(
+            mask_sensitive_value("BLOCKED_IPS", "192.168.1.1"),
+            "[CONFIGURED]"
+        );
+        assert_eq!(
+            mask_sensitive_value("TRUSTED_PROXY_IPS", "10.0.0.1"),
+            "[CONFIGURED]"
+        );
+        assert_eq!(
+            mask_sensitive_value("CC_REVERSE_PROXY_IPS", "172.16.0.1"),
+            "[CONFIGURED]"
+        );
+    }
+
+    #[test]
+    fn test_mask_sensitive_value_with_proxy() {
+        assert_eq!(
+            mask_sensitive_value("PROXY_ALLOWLIST", "10.0.0.1"),
+            "[CONFIGURED]"
+        );
+        assert_eq!(
+            mask_sensitive_value("TRUSTED_PROXY_IPS_VAR", "CUSTOM_VAR"),
+            "[CONFIGURED]"
+        );
+    }
+
+    #[test]
+    fn test_mask_sensitive_value_non_sensitive() {
+        assert_eq!(
+            mask_sensitive_value("RATE_LIMIT_REQUESTS", "100"),
+            "100"
+        );
+        assert_eq!(
+            mask_sensitive_value("MAX_BODY_SIZE_MB", "50"),
+            "50"
+        );
+        assert_eq!(
+            mask_sensitive_value("BLOCKED_METHODS", "TRACE,CONNECT"),
+            "TRACE,CONNECT"
+        );
+        assert_eq!(
+            mask_sensitive_value("BLOCKED_PATTERNS", ".php,.env"),
+            ".php,.env"
+        );
+    }
+
+    // ===========================================
+    // print_startup_info tests
+    // ===========================================
+
+    #[test]
+    fn test_print_startup_info_quiet_mode() {
+        // In quiet mode, nothing should be printed (no panic)
+        let config = StartupConfig {
+            listen_port: 8080,
+            forward_port: 9000,
+            bind_address: "0.0.0.0".to_string(),
+            verbose: false,
+            quiet: true,
+        };
+
+        // Should not panic
+        print_startup_info(&config);
+    }
+
+    #[test]
+    fn test_print_startup_info_normal_mode() {
+        // Normal mode should work without panic
+        let config = StartupConfig {
+            listen_port: 8080,
+            forward_port: 9000,
+            bind_address: "0.0.0.0".to_string(),
+            verbose: false,
+            quiet: false,
+        };
+
+        // Should not panic
+        print_startup_info(&config);
+    }
+
+    #[test]
+    fn test_print_startup_info_verbose_mode() {
+        // Verbose mode should work without panic
+        let config = StartupConfig {
+            listen_port: 8080,
+            forward_port: 9000,
+            bind_address: "0.0.0.0".to_string(),
+            verbose: true,
+            quiet: false,
+        };
+
+        // Should not panic
+        print_startup_info(&config);
+    }
+
+    #[test]
+    fn test_print_startup_info_ipv6_bind() {
+        let config = StartupConfig {
+            listen_port: 8080,
+            forward_port: 9000,
+            bind_address: "::".to_string(),
+            verbose: false,
+            quiet: false,
+        };
+
+        // Should not panic with IPv6 address
+        print_startup_info(&config);
+    }
+}

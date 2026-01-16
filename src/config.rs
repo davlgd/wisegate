@@ -671,4 +671,143 @@ mod tests {
 
         assert!(result.is_none());
     }
+
+    // ===========================================
+    // parse_comma_separated tests
+    // ===========================================
+
+    #[test]
+    fn test_parse_comma_separated_basic() {
+        let result = parse_comma_separated("a,b,c");
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_parse_comma_separated_with_whitespace() {
+        let result = parse_comma_separated(" a , b , c ");
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_parse_comma_separated_empty_string() {
+        let result = parse_comma_separated("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_comma_separated_single_item() {
+        let result = parse_comma_separated("single");
+        assert_eq!(result, vec!["single"]);
+    }
+
+    #[test]
+    fn test_parse_comma_separated_filters_empty_entries() {
+        let result = parse_comma_separated("a,,b,,,c");
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn test_parse_comma_separated_only_commas() {
+        let result = parse_comma_separated(",,,");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_comma_separated_whitespace_only() {
+        let result = parse_comma_separated("  ,  ,  ");
+        assert!(result.is_empty());
+    }
+
+    // ===========================================
+    // parse_comma_separated_uppercase tests
+    // ===========================================
+
+    #[test]
+    fn test_parse_comma_separated_uppercase_basic() {
+        let result = parse_comma_separated_uppercase("get,post,put");
+        assert_eq!(result, vec!["GET", "POST", "PUT"]);
+    }
+
+    #[test]
+    fn test_parse_comma_separated_uppercase_mixed_case() {
+        let result = parse_comma_separated_uppercase("Get,POST,pUt");
+        assert_eq!(result, vec!["GET", "POST", "PUT"]);
+    }
+
+    #[test]
+    fn test_parse_comma_separated_uppercase_with_whitespace() {
+        let result = parse_comma_separated_uppercase(" get , post , put ");
+        assert_eq!(result, vec!["GET", "POST", "PUT"]);
+    }
+
+    #[test]
+    fn test_parse_comma_separated_uppercase_empty() {
+        let result = parse_comma_separated_uppercase("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_comma_separated_uppercase_filters_empty() {
+        let result = parse_comma_separated_uppercase("get,,post");
+        assert_eq!(result, vec!["GET", "POST"]);
+    }
+
+    // ===========================================
+    // EnvVarConfig trait implementation tests
+    // ===========================================
+
+    #[test]
+    fn test_env_var_config_new() {
+        let config = EnvVarConfig::new();
+        // Should not panic and create valid config
+        assert!(config.rate_limit_config().max_requests > 0);
+    }
+
+    #[test]
+    fn test_env_var_config_default() {
+        let config = EnvVarConfig::default();
+        // Default should work the same as new
+        assert!(config.rate_limit_config().max_requests > 0);
+    }
+
+    #[test]
+    fn test_env_var_config_rate_limit_config() {
+        let config = EnvVarConfig::new();
+        let rate_config = config.rate_limit_config();
+        // Should return valid defaults
+        assert!(rate_config.is_valid());
+    }
+
+    #[test]
+    fn test_env_var_config_proxy_config() {
+        let config = EnvVarConfig::new();
+        let proxy_config = config.proxy_config();
+        // Should return valid defaults
+        assert!(proxy_config.is_valid());
+    }
+
+    #[test]
+    fn test_env_var_config_cleanup_config() {
+        let config = EnvVarConfig::new();
+        let cleanup_config = config.rate_limit_cleanup_config();
+        // Default cleanup should be enabled
+        assert!(cleanup_config.is_enabled());
+    }
+
+    #[test]
+    fn test_env_var_config_max_connections() {
+        let config = EnvVarConfig::new();
+        let max_conn = config.max_connections();
+        // Should have a reasonable default
+        assert!(max_conn > 0);
+    }
+
+    #[test]
+    fn test_env_var_config_blocked_lists_not_null() {
+        let config = EnvVarConfig::new();
+        // These should return empty slices, not panic
+        let _ = config.blocked_ips();
+        let _ = config.blocked_methods();
+        let _ = config.blocked_patterns();
+    }
 }
