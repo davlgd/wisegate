@@ -52,6 +52,6 @@ pub mod types;
 // Re-export commonly used items at crate root
 pub use config::{
     get_allowed_proxy_ips, get_blocked_ips, get_blocked_methods, get_blocked_patterns,
-    get_proxy_config, get_rate_limit_cleanup_config, get_rate_limit_config,
+    get_max_connections, get_proxy_config, get_rate_limit_cleanup_config, get_rate_limit_config,
 };
 pub use types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig, RateLimiter};
