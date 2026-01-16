@@ -153,7 +153,10 @@ pub async fn check_rate_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+    use crate::types::{
+        ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
+        RateLimitConfig, RateLimitingProvider,
+    };
     use std::time::Duration;
 
     /// Test configuration for unit tests
@@ -183,7 +186,7 @@ mod tests {
         }
     }
 
-    impl ConfigProvider for TestConfig {
+    impl RateLimitingProvider for TestConfig {
         fn rate_limit_config(&self) -> &RateLimitConfig {
             &self.rate_limit
         }
@@ -191,7 +194,9 @@ mod tests {
         fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
             &self.cleanup
         }
+    }
 
+    impl ProxyProvider for TestConfig {
         fn proxy_config(&self) -> &ProxyConfig {
             static CONFIG: ProxyConfig = ProxyConfig {
                 timeout: Duration::from_secs(30),
@@ -203,7 +208,9 @@ mod tests {
         fn allowed_proxy_ips(&self) -> Option<&[String]> {
             None
         }
+    }
 
+    impl FilteringProvider for TestConfig {
         fn blocked_ips(&self) -> &[String] {
             &[]
         }
@@ -215,7 +222,9 @@ mod tests {
         fn blocked_patterns(&self) -> &[String] {
             &[]
         }
+    }
 
+    impl ConnectionProvider for TestConfig {
         fn max_connections(&self) -> usize {
             10_000
         }

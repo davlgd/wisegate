@@ -15,13 +15,16 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use wisegate_core::{ConfigProvider, RateLimiter, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig};
+//! use wisegate_core::{
+//!     RateLimitingProvider, ProxyProvider, FilteringProvider, ConnectionProvider,
+//!     RateLimiter, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig,
+//! };
 //! use std::time::Duration;
 //!
-//! // Implement your own configuration provider
+//! // Implement your own configuration provider using composable traits
 //! struct MyConfig;
 //!
-//! impl ConfigProvider for MyConfig {
+//! impl RateLimitingProvider for MyConfig {
 //!     fn rate_limit_config(&self) -> &RateLimitConfig {
 //!         static CONFIG: RateLimitConfig = RateLimitConfig {
 //!             max_requests: 100,
@@ -37,7 +40,9 @@
 //!         };
 //!         &CONFIG
 //!     }
+//! }
 //!
+//! impl ProxyProvider for MyConfig {
 //!     fn proxy_config(&self) -> &ProxyConfig {
 //!         static CONFIG: ProxyConfig = ProxyConfig {
 //!             timeout: Duration::from_secs(30),
@@ -47,9 +52,15 @@
 //!     }
 //!
 //!     fn allowed_proxy_ips(&self) -> Option<&[String]> { None }
+//! }
+//!
+//! impl FilteringProvider for MyConfig {
 //!     fn blocked_ips(&self) -> &[String] { &[] }
 //!     fn blocked_methods(&self) -> &[String] { &[] }
 //!     fn blocked_patterns(&self) -> &[String] { &[] }
+//! }
+//!
+//! impl ConnectionProvider for MyConfig {
 //!     fn max_connections(&self) -> usize { 10_000 }
 //! }
 //!
@@ -73,6 +84,12 @@ pub mod types;
 
 // Re-export commonly used items at crate root
 pub use types::{
-    ConfigProvider, ProxyConfig, RateLimitCleanupConfig, RateLimitConfig, RateLimitEntry,
-    RateLimiter,
+    // Composable configuration traits
+    ConnectionProvider, FilteringProvider, ProxyProvider, RateLimitingProvider,
+    // Aggregated configuration trait
+    ConfigProvider,
+    // Configuration structs
+    ProxyConfig, RateLimitCleanupConfig, RateLimitConfig,
+    // Rate limiting types
+    RateLimitEntry, RateLimiter,
 };

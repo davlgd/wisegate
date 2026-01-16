@@ -249,7 +249,10 @@ fn is_valid_ip_format(ip: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+    use crate::types::{
+        ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
+        RateLimitConfig, RateLimitingProvider,
+    };
     use std::time::Duration;
 
     /// Test configuration for unit tests
@@ -281,7 +284,7 @@ mod tests {
         }
     }
 
-    impl ConfigProvider for TestConfig {
+    impl RateLimitingProvider for TestConfig {
         fn rate_limit_config(&self) -> &RateLimitConfig {
             static CONFIG: RateLimitConfig = RateLimitConfig {
                 max_requests: 100,
@@ -297,7 +300,9 @@ mod tests {
             };
             &CONFIG
         }
+    }
 
+    impl ProxyProvider for TestConfig {
         fn proxy_config(&self) -> &ProxyConfig {
             static CONFIG: ProxyConfig = ProxyConfig {
                 timeout: Duration::from_secs(30),
@@ -309,7 +314,9 @@ mod tests {
         fn allowed_proxy_ips(&self) -> Option<&[String]> {
             self.allowed_proxy_ips.as_deref()
         }
+    }
 
+    impl FilteringProvider for TestConfig {
         fn blocked_ips(&self) -> &[String] {
             &self.blocked_ips
         }
@@ -321,7 +328,9 @@ mod tests {
         fn blocked_patterns(&self) -> &[String] {
             &[]
         }
+    }
 
+    impl ConnectionProvider for TestConfig {
         fn max_connections(&self) -> usize {
             10_000
         }
