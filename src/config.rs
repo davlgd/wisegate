@@ -2,8 +2,21 @@ use std::env;
 use std::str::FromStr;
 use std::time::Duration;
 
+use once_cell::sync::Lazy;
+
 use crate::env_vars;
 use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+
+// Cached configurations - computed once at first access
+static RATE_LIMIT_CONFIG: Lazy<RateLimitConfig> = Lazy::new(compute_rate_limit_config);
+static RATE_LIMIT_CLEANUP_CONFIG: Lazy<RateLimitCleanupConfig> =
+    Lazy::new(compute_rate_limit_cleanup_config);
+static PROXY_CONFIG: Lazy<ProxyConfig> = Lazy::new(compute_proxy_config);
+static BLOCKED_IPS: Lazy<Vec<String>> = Lazy::new(compute_blocked_ips);
+static BLOCKED_PATTERNS: Lazy<Vec<String>> = Lazy::new(compute_blocked_patterns);
+static BLOCKED_METHODS: Lazy<Vec<String>> = Lazy::new(compute_blocked_methods);
+static ALLOWED_PROXY_IPS: Lazy<Option<Vec<String>>> =
+    Lazy::new(|| compute_allowed_proxy_ips_internal(|key| std::env::var(key)));
 
 // Default values
 const DEFAULT_RATE_LIMIT_REQUESTS: u32 = 100;
@@ -41,9 +54,14 @@ where
     }
 }
 
-/// Get rate limiting configuration from environment variables
+/// Get rate limiting configuration (cached)
+pub fn get_rate_limit_config() -> &'static RateLimitConfig {
+    &RATE_LIMIT_CONFIG
+}
+
+/// Compute rate limiting configuration from environment variables
 /// Invalid values fall back to defaults and log warnings
-pub fn get_rate_limit_config() -> RateLimitConfig {
+fn compute_rate_limit_config() -> RateLimitConfig {
     let max_requests =
         parse_env_var_or_default(env_vars::RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_REQUESTS);
 
@@ -69,9 +87,14 @@ pub fn get_rate_limit_config() -> RateLimitConfig {
     config
 }
 
-/// Get rate limiter cleanup configuration from environment variables
+/// Get rate limiter cleanup configuration (cached)
+pub fn get_rate_limit_cleanup_config() -> &'static RateLimitCleanupConfig {
+    &RATE_LIMIT_CLEANUP_CONFIG
+}
+
+/// Compute rate limiter cleanup configuration from environment variables
 /// Controls automatic cleanup of expired rate limit entries to prevent memory exhaustion
-pub fn get_rate_limit_cleanup_config() -> RateLimitCleanupConfig {
+fn compute_rate_limit_cleanup_config() -> RateLimitCleanupConfig {
     let threshold = parse_env_var_or_default(
         env_vars::RATE_LIMIT_CLEANUP_THRESHOLD,
         DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD,
@@ -88,9 +111,14 @@ pub fn get_rate_limit_cleanup_config() -> RateLimitCleanupConfig {
     }
 }
 
-/// Get proxy configuration from environment variables
+/// Get proxy configuration (cached)
+pub fn get_proxy_config() -> &'static ProxyConfig {
+    &PROXY_CONFIG
+}
+
+/// Compute proxy configuration from environment variables
 /// Invalid values fall back to defaults and log warnings
-pub fn get_proxy_config() -> ProxyConfig {
+fn compute_proxy_config() -> ProxyConfig {
     let timeout_secs =
         parse_env_var_or_default(env_vars::PROXY_TIMEOUT_SECS, DEFAULT_PROXY_TIMEOUT_SECS);
 
@@ -114,15 +142,14 @@ pub fn get_proxy_config() -> ProxyConfig {
     config
 }
 
-/// Get list of allowed proxy IPs from environment
-/// Uses the simplified logic from env_vars to try primary then alternative variable
-pub fn get_allowed_proxy_ips() -> Option<Vec<String>> {
-    get_allowed_proxy_ips_internal(|key| std::env::var(key))
+/// Get list of allowed proxy IPs (cached)
+pub fn get_allowed_proxy_ips() -> Option<&'static Vec<String>> {
+    ALLOWED_PROXY_IPS.as_ref()
 }
 
-/// Internal function that accepts an environment variable lookup function
-/// This allows for easier testing without modifying global environment
-fn get_allowed_proxy_ips_internal<F>(env_var: F) -> Option<Vec<String>>
+/// Compute allowed proxy IPs from environment
+/// Uses the simplified logic from env_vars to try primary then alternative variable
+fn compute_allowed_proxy_ips_internal<F>(env_var: F) -> Option<Vec<String>>
 where
     F: Fn(&str) -> Result<String, std::env::VarError>,
 {
@@ -153,8 +180,13 @@ where
     None
 }
 
-/// Get list of blocked IPs from environment
-pub fn get_blocked_ips() -> Vec<String> {
+/// Get list of blocked IPs (cached)
+pub fn get_blocked_ips() -> &'static Vec<String> {
+    &BLOCKED_IPS
+}
+
+/// Compute blocked IPs from environment
+fn compute_blocked_ips() -> Vec<String> {
     env::var(env_vars::BLOCKED_IPS)
         .unwrap_or_default()
         .split(',')
@@ -163,8 +195,13 @@ pub fn get_blocked_ips() -> Vec<String> {
         .collect()
 }
 
-/// Get list of blocked URL patterns from environment
-pub fn get_blocked_patterns() -> Vec<String> {
+/// Get list of blocked URL patterns (cached)
+pub fn get_blocked_patterns() -> &'static Vec<String> {
+    &BLOCKED_PATTERNS
+}
+
+/// Compute blocked URL patterns from environment
+fn compute_blocked_patterns() -> Vec<String> {
     env::var(env_vars::BLOCKED_PATTERNS)
         .unwrap_or_default()
         .split(',')
@@ -173,8 +210,13 @@ pub fn get_blocked_patterns() -> Vec<String> {
         .collect()
 }
 
-/// Get list of blocked HTTP methods from environment
-pub fn get_blocked_methods() -> Vec<String> {
+/// Get list of blocked HTTP methods (cached)
+pub fn get_blocked_methods() -> &'static Vec<String> {
+    &BLOCKED_METHODS
+}
+
+/// Compute blocked HTTP methods from environment
+fn compute_blocked_methods() -> Vec<String> {
     env::var(env_vars::BLOCKED_METHODS)
         .unwrap_or_default()
         .split(',')
@@ -205,7 +247,7 @@ mod tests {
         env_vars.insert(env_vars::ALLOWED_PROXY_IPS, "192.168.1.1,10.0.0.1");
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         assert!(result.is_some());
         let ips = result.unwrap();
@@ -222,7 +264,7 @@ mod tests {
         env_vars.insert("TRUSTED_PROXY_IPS", "172.16.0.1,203.0.113.1");
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         assert!(result.is_some());
         let ips = result.unwrap();
@@ -240,7 +282,7 @@ mod tests {
         env_vars.insert("MY_CUSTOM_PROXY_IPS", "172.16.0.1");
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         assert!(result.is_some());
         let ips = result.unwrap();
@@ -256,7 +298,7 @@ mod tests {
         env_vars.insert("PROXY_ALLOWLIST", "10.1.1.1,10.1.1.2,10.1.1.3");
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         assert!(result.is_some());
         let ips = result.unwrap();
@@ -274,7 +316,7 @@ mod tests {
         env_vars.insert("DATABASE_URL", "10.1.1.1,10.1.1.2");
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         // Should return None because DATABASE_URL is not in the whitelist
         assert!(result.is_none());
@@ -286,7 +328,7 @@ mod tests {
         let env_vars = HashMap::new();
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         assert!(result.is_none());
     }
@@ -298,7 +340,7 @@ mod tests {
         env_vars.insert(env_vars::ALLOWED_PROXY_IPS, " 192.168.1.1 , 10.0.0.1 ");
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         assert!(result.is_some());
         let ips = result.unwrap();
@@ -315,7 +357,7 @@ mod tests {
         env_vars.insert("EMPTY_PROXY_VAR", "");
         let env_fn = create_mock_env(env_vars);
 
-        let result = get_allowed_proxy_ips_internal(env_fn);
+        let result = compute_allowed_proxy_ips_internal(env_fn);
 
         assert!(result.is_none());
     }
