@@ -8,16 +8,15 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use wisegate::RateLimiter;
 use wisegate::args::Args;
 use wisegate::config::EnvVarConfig;
+use wisegate::connection::{ConnectionLimiter, ConnectionTracker};
 use wisegate::server::StartupConfig;
 use wisegate::{config, request_handler, server};
 
@@ -96,23 +95,22 @@ async fn main() {
         }
     };
 
-    // Create connection limiter semaphore (0 = unlimited)
+    // Create connection limiter (0 = unlimited)
     let max_connections = config::get_max_connections();
-    let connection_semaphore = if max_connections > 0 {
+    let connection_limiter = ConnectionLimiter::new(max_connections);
+    if connection_limiter.is_enabled() {
         info!(
             max_connections = max_connections,
             "Connection limit configured"
         );
-        Some(Arc::new(Semaphore::new(max_connections)))
     } else {
         warn!("No connection limit configured (MAX_CONNECTIONS=0)");
-        None
-    };
+    }
 
     info!(port = args.listen, bind = %args.bind, "WiseGate is running");
 
     // Track active connections for graceful shutdown
-    let active_connections = Arc::new(AtomicUsize::new(0));
+    let connection_tracker = ConnectionTracker::new();
 
     // Accept connections until shutdown signal
     loop {
@@ -128,10 +126,10 @@ async fn main() {
                 };
 
                 // Check connection limit before accepting
-                let permit = if let Some(ref semaphore) = connection_semaphore {
-                    match semaphore.clone().try_acquire_owned() {
-                        Ok(permit) => Some(permit),
-                        Err(_) => {
+                let permit = if connection_limiter.is_enabled() {
+                    match connection_limiter.try_acquire() {
+                        Some(permit) => Some(permit),
+                        None => {
                             warn!(client = %addr, max = max_connections, "Connection rejected: server at capacity");
                             drop(stream);
                             continue;
@@ -147,12 +145,12 @@ async fn main() {
                 let limiter = rate_limiter.clone();
                 let forward_host = args.bind.clone();
                 let forward_port = args.forward;
-                let connections = active_connections.clone();
+                let tracker = connection_tracker.clone();
                 let config = env_config.clone();
                 let client = http_client.clone();
 
                 // Increment active connection count
-                connections.fetch_add(1, Ordering::SeqCst);
+                tracker.increment();
 
                 tokio::task::spawn(async move {
                     // Keep permit alive for the duration of the connection
@@ -167,7 +165,7 @@ async fn main() {
                     }
 
                     // Decrement active connection count
-                    connections.fetch_sub(1, Ordering::SeqCst);
+                    tracker.decrement();
                 });
             }
 
@@ -180,26 +178,20 @@ async fn main() {
     }
 
     // Graceful shutdown: wait for active connections to finish
-    let active = active_connections.load(Ordering::SeqCst);
+    let active = connection_tracker.count();
     if active > 0 {
         info!(
             active_connections = active,
             "Waiting for connections to finish..."
         );
 
-        let start = std::time::Instant::now();
         let timeout = Duration::from_secs(SHUTDOWN_TIMEOUT_SECS);
-
-        while active_connections.load(Ordering::SeqCst) > 0 {
-            if start.elapsed() >= timeout {
-                let remaining = active_connections.load(Ordering::SeqCst);
-                warn!(
-                    remaining_connections = remaining,
-                    "Timeout reached, forcing shutdown"
-                );
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+        if !connection_tracker.wait_for_shutdown(timeout).await {
+            let remaining = connection_tracker.count();
+            warn!(
+                remaining_connections = remaining,
+                "Timeout reached, forcing shutdown"
+            );
         }
     }
 
