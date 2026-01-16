@@ -179,10 +179,18 @@ async fn forward_with_reqwest(
 
             match response.bytes().await {
                 Ok(body_bytes) => {
-                    let mut hyper_response = Response::builder()
+                    let mut hyper_response = match Response::builder()
                         .status(status.as_u16())
                         .body(Full::new(body_bytes))
-                        .unwrap();
+                    {
+                        Ok(resp) => resp,
+                        Err(_) => {
+                            return Ok(create_error_response(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to build response",
+                            ))
+                        }
+                    };
 
                     // Copy response headers (skip hop-by-hop headers)
                     for (name, value) in headers.iter() {
@@ -229,12 +237,16 @@ async fn forward_with_reqwest(
 }
 
 /// Create standardized error responses
+/// Falls back to a minimal 500 response if building fails (should never happen with valid StatusCode)
 pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full<bytes::Bytes>> {
     Response::builder()
         .status(status)
         .header("content-type", "text/plain")
         .body(Full::new(bytes::Bytes::from(message.to_string())))
-        .unwrap()
+        .unwrap_or_else(|_| {
+            // Fallback response if builder fails (extremely unlikely)
+            Response::new(Full::new(bytes::Bytes::from("Internal Server Error")))
+        })
 }
 
 /// Check if URL path contains any blocked patterns

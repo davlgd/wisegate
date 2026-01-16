@@ -34,8 +34,14 @@ async fn main() {
     // Initialize rate limiter
     let rate_limiter = Arc::new(Mutex::new(HashMap::new()));
 
-    // Bind to address
-    let bind_ip: std::net::IpAddr = args.bind.parse().expect("Invalid bind address");
+    // Bind to address (already validated in args.validate())
+    let bind_ip: std::net::IpAddr = match args.bind.parse() {
+        Ok(ip) => ip,
+        Err(_) => {
+            eprintln!("❌ Invalid bind address: {}", args.bind);
+            std::process::exit(1);
+        }
+    };
     let bind_addr = SocketAddr::from((bind_ip, args.listen));
     let listener = match TcpListener::bind(bind_addr).await {
         Ok(listener) => listener,
