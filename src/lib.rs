@@ -42,6 +42,7 @@
 
 pub mod args;
 pub mod config;
+pub mod connection;
 pub mod env_vars;
 pub mod server;
 
