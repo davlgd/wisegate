@@ -96,6 +96,44 @@ where
     }
 }
 
+/// Parses a comma-separated string into a Vec of trimmed strings.
+///
+/// Filters out empty entries after trimming.
+///
+/// # Arguments
+///
+/// * `input` - The comma-separated string to parse
+///
+/// # Returns
+///
+/// A Vec of non-empty, trimmed strings
+fn parse_comma_separated(input: &str) -> Vec<String> {
+    input
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Parses a comma-separated string with uppercase normalization.
+///
+/// Used for HTTP methods and other case-insensitive values.
+///
+/// # Arguments
+///
+/// * `input` - The comma-separated string to parse
+///
+/// # Returns
+///
+/// A Vec of non-empty, trimmed, uppercase strings
+fn parse_comma_separated_uppercase(input: &str) -> Vec<String> {
+    input
+        .split(',')
+        .map(|s| s.trim().to_uppercase())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 // ============================================================================
 // Public Configuration Getters
 // ============================================================================
@@ -303,7 +341,7 @@ where
     if let Ok(ips) = env_var(env_vars::ALLOWED_PROXY_IPS)
         && !ips.trim().is_empty()
     {
-        return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
+        return Some(parse_comma_separated(&ips));
     }
 
     // Try user-defined alternative variable if set (only from whitelist)
@@ -314,7 +352,7 @@ where
             && let Ok(ips) = env_var(&alt_var_name)
             && !ips.trim().is_empty()
         {
-            return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
+            return Some(parse_comma_separated(&ips));
         } else if !ALLOWED_PROXY_VAR_NAMES.contains(&alt_var_name.as_str()) {
             warn!(
                 var = %alt_var_name,
@@ -348,11 +386,8 @@ pub fn get_blocked_ips() -> &'static Vec<String> {
 /// Computes blocked IPs from environment variable.
 fn compute_blocked_ips() -> Vec<String> {
     env::var(env_vars::BLOCKED_IPS)
+        .map(|s| parse_comma_separated(&s))
         .unwrap_or_default()
-        .split(',')
-        .map(|ip| ip.trim().to_string())
-        .filter(|ip| !ip.is_empty())
-        .collect()
 }
 
 /// Returns the cached list of blocked URL patterns.
@@ -379,11 +414,8 @@ pub fn get_blocked_patterns() -> &'static Vec<String> {
 /// Computes blocked URL patterns from environment variable.
 fn compute_blocked_patterns() -> Vec<String> {
     env::var(env_vars::BLOCKED_PATTERNS)
+        .map(|s| parse_comma_separated(&s))
         .unwrap_or_default()
-        .split(',')
-        .map(|pattern| pattern.trim().to_string())
-        .filter(|pattern| !pattern.is_empty())
-        .collect()
 }
 
 /// Returns the cached list of blocked HTTP methods.
@@ -410,11 +442,8 @@ pub fn get_blocked_methods() -> &'static Vec<String> {
 /// Computes blocked HTTP methods from environment variable.
 fn compute_blocked_methods() -> Vec<String> {
     env::var(env_vars::BLOCKED_METHODS)
+        .map(|s| parse_comma_separated_uppercase(&s))
         .unwrap_or_default()
-        .split(',')
-        .map(|method| method.trim().to_uppercase())
-        .filter(|method| !method.is_empty())
-        .collect()
 }
 
 // ============================================================================
