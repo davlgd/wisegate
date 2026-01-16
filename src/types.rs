@@ -10,6 +10,78 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
+/// Trait for configuration injection.
+///
+/// Implement this trait to provide configuration from any source:
+/// environment variables, files, remote services, etc.
+///
+/// # Example
+///
+/// ```
+/// use wisegate::types::{ConfigProvider, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig};
+/// use std::time::Duration;
+///
+/// struct MyConfig;
+///
+/// impl ConfigProvider for MyConfig {
+///     fn rate_limit_config(&self) -> &RateLimitConfig {
+///         static CONFIG: RateLimitConfig = RateLimitConfig {
+///             max_requests: 100,
+///             window_duration: Duration::from_secs(60),
+///         };
+///         &CONFIG
+///     }
+///
+///     fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
+///         static CONFIG: RateLimitCleanupConfig = RateLimitCleanupConfig {
+///             threshold: 10_000,
+///             interval: Duration::from_secs(60),
+///         };
+///         &CONFIG
+///     }
+///
+///     fn proxy_config(&self) -> &ProxyConfig {
+///         static CONFIG: ProxyConfig = ProxyConfig {
+///             timeout: Duration::from_secs(30),
+///             max_body_size: 100 * 1024 * 1024,
+///         };
+///         &CONFIG
+///     }
+///
+///     fn allowed_proxy_ips(&self) -> Option<&[String]> { None }
+///     fn blocked_ips(&self) -> &[String] { &[] }
+///     fn blocked_methods(&self) -> &[String] { &[] }
+///     fn blocked_patterns(&self) -> &[String] { &[] }
+///     fn max_connections(&self) -> usize { 10_000 }
+/// }
+/// ```
+pub trait ConfigProvider: Send + Sync {
+    /// Returns the rate limiting configuration.
+    fn rate_limit_config(&self) -> &RateLimitConfig;
+
+    /// Returns the rate limiter cleanup configuration.
+    fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig;
+
+    /// Returns the proxy configuration.
+    fn proxy_config(&self) -> &ProxyConfig;
+
+    /// Returns the list of allowed proxy IPs, if configured.
+    /// When `Some`, strict mode is enabled. When `None`, permissive mode is used.
+    fn allowed_proxy_ips(&self) -> Option<&[String]>;
+
+    /// Returns the list of blocked IP addresses.
+    fn blocked_ips(&self) -> &[String];
+
+    /// Returns the list of blocked HTTP methods.
+    fn blocked_methods(&self) -> &[String];
+
+    /// Returns the list of blocked URL patterns.
+    fn blocked_patterns(&self) -> &[String];
+
+    /// Returns the maximum number of concurrent connections.
+    fn max_connections(&self) -> usize;
+}
+
 /// Configuration for rate limiting per IP address.
 ///
 /// Controls how many requests a single IP can make within a time window.

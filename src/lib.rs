@@ -52,5 +52,6 @@ pub use config::{
     get_max_connections, get_proxy_config, get_rate_limit_cleanup_config, get_rate_limit_config,
 };
 pub use types::{
-    ProxyConfig, RateLimitCleanupConfig, RateLimitConfig, RateLimitEntry, RateLimiter,
+    ConfigProvider, ProxyConfig, RateLimitCleanupConfig, RateLimitConfig, RateLimitEntry,
+    RateLimiter,
 };
