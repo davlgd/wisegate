@@ -33,7 +33,7 @@ use once_cell::sync::Lazy;
 use tracing::warn;
 
 use crate::env_vars;
-use crate::types::{ConfigProvider, ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+use wisegate_core::{ConfigProvider, ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
 
 // ============================================================================
 // Cached Configuration (computed once at first access)
