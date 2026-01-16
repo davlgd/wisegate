@@ -83,7 +83,11 @@ static LAST_CLEANUP: Mutex<Option<Instant>> = Mutex::const_new(None);
 ///     return Err(StatusCode::TOO_MANY_REQUESTS);
 /// }
 /// ```
-pub async fn check_rate_limit(limiter: &RateLimiter, ip: &str, config: &impl ConfigProvider) -> bool {
+pub async fn check_rate_limit(
+    limiter: &RateLimiter,
+    ip: &str,
+    config: &impl ConfigProvider,
+) -> bool {
     let rate_config = config.rate_limit_config();
     let cleanup_config = config.rate_limit_cleanup_config();
     let mut rate_map = limiter.inner().lock().await;

@@ -54,7 +54,10 @@ use crate::types::ConfigProvider;
 /// let blocked = is_ip_blocked("192.168.1.1", &config);
 /// ```
 pub fn is_ip_blocked(ip: &str, config: &impl ConfigProvider) -> bool {
-    config.blocked_ips().iter().any(|blocked_ip| blocked_ip == ip)
+    config
+        .blocked_ips()
+        .iter()
+        .any(|blocked_ip| blocked_ip == ip)
 }
 
 /// Extracts and validates the real client IP from request headers.

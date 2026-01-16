@@ -78,22 +78,23 @@ pub async fn handle_request<C: ConfigProvider>(
     config: Arc<C>,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     // Extract and validate real client IP
-    let real_client_ip = match ip_filter::extract_and_validate_real_ip(req.headers(), config.as_ref()) {
-        Some(ip) => ip,
-        None => {
-            // In permissive mode (no allowlist configured), we couldn't extract IP from headers
-            // Use placeholder IP and continue with non-IP-based security features only
-            if config.allowed_proxy_ips().is_none() {
-                "unknown".to_string()
-            } else {
-                // If allowlist is configured but validation failed, reject the request
-                return Ok(create_error_response(
-                    StatusCode::FORBIDDEN,
-                    "Invalid request: missing or invalid proxy headers",
-                ));
+    let real_client_ip =
+        match ip_filter::extract_and_validate_real_ip(req.headers(), config.as_ref()) {
+            Some(ip) => ip,
+            None => {
+                // In permissive mode (no allowlist configured), we couldn't extract IP from headers
+                // Use placeholder IP and continue with non-IP-based security features only
+                if config.allowed_proxy_ips().is_none() {
+                    "unknown".to_string()
+                } else {
+                    // If allowlist is configured but validation failed, reject the request
+                    return Ok(create_error_response(
+                        StatusCode::FORBIDDEN,
+                        "Invalid request: missing or invalid proxy headers",
+                    ));
+                }
             }
-        }
-    };
+        };
 
     // Check if IP is blocked (skip if IP is unknown)
     if real_client_ip != "unknown" && ip_filter::is_ip_blocked(&real_client_ip, config.as_ref()) {
