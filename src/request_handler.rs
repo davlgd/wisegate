@@ -22,9 +22,10 @@ use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, StatusCode, body::Incoming};
 use once_cell::sync::Lazy;
 use std::convert::Infallible;
+use std::sync::Arc;
 
 use crate::config;
-use crate::types::RateLimiter;
+use crate::types::{ConfigProvider, RateLimiter};
 use crate::{ip_filter, rate_limiter};
 
 /// Shared HTTP client for connection pooling and reuse.
@@ -57,6 +58,7 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 /// * `forward_host` - The upstream host to forward requests to
 /// * `forward_port` - The upstream port to forward requests to
 /// * `limiter` - The shared rate limiter instance
+/// * `config` - Configuration provider for all settings
 ///
 /// # Returns
 ///
@@ -68,19 +70,20 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 ///
 /// In strict mode (when `CC_REVERSE_PROXY_IPS` is configured), requests
 /// without valid proxy headers are rejected with 403 Forbidden.
-pub async fn handle_request(
+pub async fn handle_request<C: ConfigProvider>(
     req: Request<Incoming>,
     forward_host: String,
     forward_port: u16,
     limiter: RateLimiter,
+    config: Arc<C>,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     // Extract and validate real client IP
-    let real_client_ip = match ip_filter::extract_and_validate_real_ip(req.headers()) {
+    let real_client_ip = match ip_filter::extract_and_validate_real_ip(req.headers(), config.as_ref()) {
         Some(ip) => ip,
         None => {
             // In permissive mode (no allowlist configured), we couldn't extract IP from headers
             // Use placeholder IP and continue with non-IP-based security features only
-            if config::get_allowed_proxy_ips().is_none() {
+            if config.allowed_proxy_ips().is_none() {
                 "unknown".to_string()
             } else {
                 // If allowlist is configured but validation failed, reject the request
@@ -93,7 +96,7 @@ pub async fn handle_request(
     };
 
     // Check if IP is blocked (skip if IP is unknown)
-    if real_client_ip != "unknown" && ip_filter::is_ip_blocked(&real_client_ip) {
+    if real_client_ip != "unknown" && ip_filter::is_ip_blocked(&real_client_ip, config.as_ref()) {
         return Ok(create_error_response(
             StatusCode::FORBIDDEN,
             "IP address is blocked",
@@ -102,13 +105,13 @@ pub async fn handle_request(
 
     // Check for blocked URL patterns
     let request_path = req.uri().path();
-    if is_url_pattern_blocked(request_path) {
+    if is_url_pattern_blocked(request_path, config.as_ref()) {
         return Ok(create_error_response(StatusCode::NOT_FOUND, "Not Found"));
     }
 
     // Check for blocked HTTP methods
     let request_method = req.method().as_str();
-    if is_method_blocked(request_method) {
+    if is_method_blocked(request_method, config.as_ref()) {
         return Ok(create_error_response(
             StatusCode::METHOD_NOT_ALLOWED,
             "HTTP method not allowed",
@@ -117,7 +120,7 @@ pub async fn handle_request(
 
     // Apply rate limiting (skip if IP is unknown)
     if real_client_ip != "unknown"
-        && !rate_limiter::check_rate_limit(&limiter, &real_client_ip).await
+        && !rate_limiter::check_rate_limit(&limiter, &real_client_ip, config.as_ref()).await
     {
         return Ok(create_error_response(
             StatusCode::TOO_MANY_REQUESTS,
@@ -134,7 +137,7 @@ pub async fn handle_request(
     }
 
     // Forward the request
-    forward_request(req, &forward_host, forward_port).await
+    forward_request(req, &forward_host, forward_port, config.as_ref()).await
 }
 
 /// Forward request to upstream service
@@ -142,8 +145,9 @@ async fn forward_request(
     req: Request<Incoming>,
     host: &str,
     port: u16,
+    config: &impl ConfigProvider,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
-    let proxy_config = config::get_proxy_config();
+    let proxy_config = config.proxy_config();
     let (parts, body) = req.into_parts();
     let body_bytes = match body.collect().await {
         Ok(bytes) => {
@@ -329,8 +333,8 @@ pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full
 
 /// Check if URL path contains any blocked patterns
 /// Decodes URL-encoded characters to prevent bypass via encoding (e.g., .ph%70 for .php)
-fn is_url_pattern_blocked(path: &str) -> bool {
-    let blocked_patterns = config::get_blocked_patterns();
+fn is_url_pattern_blocked(path: &str, config: &impl ConfigProvider) -> bool {
+    let blocked_patterns = config.blocked_patterns();
     if blocked_patterns.is_empty() {
         return false;
     }
@@ -376,8 +380,8 @@ fn url_decode(input: &str) -> String {
 }
 
 /// Check if HTTP method is blocked
-fn is_method_blocked(method: &str) -> bool {
-    let blocked_methods = config::get_blocked_methods();
+fn is_method_blocked(method: &str, config: &impl ConfigProvider) -> bool {
+    let blocked_methods = config.blocked_methods();
     blocked_methods
         .iter()
         .any(|blocked_method| blocked_method == &method.to_uppercase())
