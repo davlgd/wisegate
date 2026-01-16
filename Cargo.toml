@@ -19,7 +19,7 @@ exclude = [
 ]
 
 [dependencies]
-wisegate-core = { path = "wisegate-core" }
+wisegate-core = { version = "0.8.0", path = "wisegate-core" }
 clap = { version = "4.5.54", features = ["derive"] }
 hyper = { version = "1.8.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.19", features = ["tokio"] }
