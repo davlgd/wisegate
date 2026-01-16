@@ -6,17 +6,17 @@ use clap::Parser;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use wisegate::args::Args;
+use wisegate::types::RateLimiter;
 use wisegate::{config, request_handler, server};
 
 /// Graceful shutdown timeout in seconds
@@ -63,7 +63,7 @@ async fn main() {
     server::print_startup_info(&args);
 
     // Initialize rate limiter
-    let rate_limiter = Arc::new(Mutex::new(HashMap::new()));
+    let rate_limiter = RateLimiter::new();
 
     // Bind to address (already validated in args.validate())
     let bind_ip: std::net::IpAddr = match args.bind.parse() {

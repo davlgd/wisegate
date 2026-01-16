@@ -15,16 +15,13 @@
 //!
 //! ```rust,no_run
 //! use wisegate::{config, types::RateLimiter};
-//! use std::sync::Arc;
-//! use std::collections::HashMap;
-//! use tokio::sync::Mutex;
 //!
 //! // Get configuration from environment
 //! let rate_config = config::get_rate_limit_config();
 //! let proxy_config = config::get_proxy_config();
 //!
 //! // Create a rate limiter
-//! let limiter: RateLimiter = Arc::new(Mutex::new(HashMap::new()));
+//! let limiter = RateLimiter::new();
 //! ```
 //!
 //! # Modules
@@ -54,4 +51,6 @@ pub use config::{
     get_allowed_proxy_ips, get_blocked_ips, get_blocked_methods, get_blocked_patterns,
     get_max_connections, get_proxy_config, get_rate_limit_cleanup_config, get_rate_limit_config,
 };
-pub use types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig, RateLimiter};
+pub use types::{
+    ProxyConfig, RateLimitCleanupConfig, RateLimitConfig, RateLimitEntry, RateLimiter,
+};
