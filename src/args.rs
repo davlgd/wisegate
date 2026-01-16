@@ -16,6 +16,8 @@
 //! }
 //! ```
 
+use std::net::IpAddr;
+
 use clap::Parser;
 
 /// Command line arguments for WiseGate.
@@ -109,7 +111,7 @@ pub struct Args {
 }
 
 impl Args {
-    /// Validates the parsed command line arguments.
+    /// Validates the parsed command line arguments and returns the parsed bind IP.
     ///
     /// Performs the following validations:
     /// - Listen and forward ports must be different
@@ -118,7 +120,7 @@ impl Args {
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - If all arguments are valid
+    /// * `Ok(IpAddr)` - The validated and parsed bind IP address
     /// * `Err(String)` - A descriptive error message if validation fails
     ///
     /// # Example
@@ -135,7 +137,7 @@ impl Args {
     /// let args = Args::try_parse_from(["wisegate", "-l", "8080", "-f", "9000"]).unwrap();
     /// assert!(args.validate().is_ok());
     /// ```
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<IpAddr, String> {
         if self.listen == self.forward {
             return Err("Listen and forward ports cannot be the same".to_string());
         }
@@ -144,11 +146,9 @@ impl Args {
             return Err("Ports must be greater than 0".to_string());
         }
 
-        // Validate bind address format
-        if self.bind.parse::<std::net::IpAddr>().is_err() {
-            return Err(format!("Invalid bind address: '{}'", self.bind));
-        }
-
-        Ok(())
+        // Validate and parse bind address
+        self.bind
+            .parse::<IpAddr>()
+            .map_err(|_| format!("Invalid bind address: '{}'", self.bind))
     }
 }
