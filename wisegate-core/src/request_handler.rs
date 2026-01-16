@@ -24,7 +24,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 
 use crate::types::{ConfigProvider, RateLimiter};
-use crate::{ip_filter, rate_limiter};
+use crate::{headers, ip_filter, rate_limiter};
 
 /// Handles an incoming HTTP request through the proxy pipeline.
 ///
@@ -228,7 +228,7 @@ async fn forward_with_reqwest(
     match req_builder.send().await {
         Ok(response) => {
             let status = response.status();
-            let headers = response.headers().clone();
+            let resp_headers = response.headers().clone();
 
             match response.bytes().await {
                 Ok(body_bytes) => {
@@ -246,10 +246,10 @@ async fn forward_with_reqwest(
                     };
 
                     // Copy response headers (skip hop-by-hop headers)
-                    for (name, value) in headers.iter() {
+                    for (name, value) in resp_headers.iter() {
                         let header_name = name.as_str().to_lowercase();
                         // Skip hop-by-hop headers that shouldn't be forwarded
-                        if !is_hop_by_hop_header(&header_name)
+                        if !headers::is_hop_by_hop(&header_name)
                             && let (Ok(hyper_name), Ok(hyper_value)) = (
                                 hyper::header::HeaderName::from_bytes(name.as_str().as_bytes()),
                                 hyper::header::HeaderValue::from_bytes(value.as_bytes()),
@@ -380,107 +380,11 @@ fn is_method_blocked(method: &str, config: &impl ConfigProvider) -> bool {
         .any(|blocked_method| blocked_method == &method.to_uppercase())
 }
 
-/// Check if a header is a hop-by-hop header that shouldn't be forwarded
-fn is_hop_by_hop_header(header_name: &str) -> bool {
-    matches!(
-        header_name,
-        "connection"
-            | "keep-alive"
-            | "proxy-authenticate"
-            | "proxy-authorization"
-            | "te"
-            | "trailers"
-            | "transfer-encoding"
-            | "upgrade"
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{
-        ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
-        RateLimitConfig, RateLimitingProvider,
-    };
+    use crate::test_utils::TestConfig;
     use http_body_util::BodyExt;
-    use std::time::Duration;
-
-    /// Test configuration for unit tests
-    struct TestConfig {
-        blocked_methods: Vec<String>,
-        blocked_patterns: Vec<String>,
-    }
-
-    impl TestConfig {
-        fn new() -> Self {
-            Self {
-                blocked_methods: vec![],
-                blocked_patterns: vec![],
-            }
-        }
-
-        fn with_blocked_methods(mut self, methods: Vec<&str>) -> Self {
-            self.blocked_methods = methods.into_iter().map(String::from).collect();
-            self
-        }
-
-        fn with_blocked_patterns(mut self, patterns: Vec<&str>) -> Self {
-            self.blocked_patterns = patterns.into_iter().map(String::from).collect();
-            self
-        }
-    }
-
-    impl RateLimitingProvider for TestConfig {
-        fn rate_limit_config(&self) -> &RateLimitConfig {
-            static CONFIG: RateLimitConfig = RateLimitConfig {
-                max_requests: 100,
-                window_duration: Duration::from_secs(60),
-            };
-            &CONFIG
-        }
-
-        fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
-            static CONFIG: RateLimitCleanupConfig = RateLimitCleanupConfig {
-                threshold: 10_000,
-                interval: Duration::from_secs(60),
-            };
-            &CONFIG
-        }
-    }
-
-    impl ProxyProvider for TestConfig {
-        fn proxy_config(&self) -> &ProxyConfig {
-            static CONFIG: ProxyConfig = ProxyConfig {
-                timeout: Duration::from_secs(30),
-                max_body_size: 100 * 1024 * 1024,
-            };
-            &CONFIG
-        }
-
-        fn allowed_proxy_ips(&self) -> Option<&[String]> {
-            None
-        }
-    }
-
-    impl FilteringProvider for TestConfig {
-        fn blocked_ips(&self) -> &[String] {
-            &[]
-        }
-
-        fn blocked_methods(&self) -> &[String] {
-            &self.blocked_methods
-        }
-
-        fn blocked_patterns(&self) -> &[String] {
-            &self.blocked_patterns
-        }
-    }
-
-    impl ConnectionProvider for TestConfig {
-        fn max_connections(&self) -> usize {
-            10_000
-        }
-    }
 
     // ===========================================
     // url_decode tests
@@ -654,31 +558,6 @@ mod tests {
         assert!(is_method_blocked("TRACE", &config));
         assert!(is_method_blocked("trace", &config));
         assert!(is_method_blocked("Trace", &config));
-    }
-
-    // ===========================================
-    // is_hop_by_hop_header tests
-    // ===========================================
-
-    #[test]
-    fn test_hop_by_hop_headers() {
-        assert!(is_hop_by_hop_header("connection"));
-        assert!(is_hop_by_hop_header("keep-alive"));
-        assert!(is_hop_by_hop_header("proxy-authenticate"));
-        assert!(is_hop_by_hop_header("proxy-authorization"));
-        assert!(is_hop_by_hop_header("te"));
-        assert!(is_hop_by_hop_header("trailers"));
-        assert!(is_hop_by_hop_header("transfer-encoding"));
-        assert!(is_hop_by_hop_header("upgrade"));
-    }
-
-    #[test]
-    fn test_not_hop_by_hop_headers() {
-        assert!(!is_hop_by_hop_header("content-type"));
-        assert!(!is_hop_by_hop_header("accept"));
-        assert!(!is_hop_by_hop_header("authorization"));
-        assert!(!is_hop_by_hop_header("x-custom-header"));
-        assert!(!is_hop_by_hop_header("host"));
     }
 
     // ===========================================
