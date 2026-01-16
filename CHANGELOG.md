@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Configuration caching**: `once_cell::Lazy` for zero-overhead config access
 - **Library structure**: Extracted `lib.rs` for better testability and reuse
 - **Complete rustdoc**: All public functions documented with examples
+- **Default ports**: `--listen` defaults to 8080, `--forward` defaults to 9000
 
 ### Enhanced
 - **Performance**: `opt-level = 3` (2x faster than `"z"`, +0.8MB)
