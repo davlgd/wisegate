@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-01-16
+
+### Added
+- **wisegate-core crate**: Extracted reusable library for embedding in other projects
+- **ConfigProvider trait**: Dependency injection for configuration, enabling library reuse
+- **EnvVarConfig**: Default implementation reading from environment variables
+- **Comprehensive unit tests**: 102 tests covering types, ip_filter, rate_limiter, request_handler
+
+### Refactored
+- **Workspace structure**: Split into `wisegate` (CLI) and `wisegate-core` (library)
+- **ip_filter**: Accepts `ConfigProvider` instead of global config
+- **rate_limiter**: Accepts `ConfigProvider` instead of global config
+- **request_handler**: Accepts `ConfigProvider` and HTTP client as parameters
+
+### Removed
+- **test-local.py**: Removed redundant Python test script (replaced by Rust integration tests)
+
+---
+
 ## [0.7.2] - 2026-01-16
 
 ### Added

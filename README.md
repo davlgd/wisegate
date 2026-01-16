@@ -123,25 +123,43 @@ WiseGate's core functionality is available as a separate crate `wisegate-core` f
 
 ```toml
 [dependencies]
-wisegate-core = "0.7"
+wisegate-core = "0.8"
 ```
 
 ```rust
-use wisegate_core::{ConfigProvider, RateLimiter, request_handler};
+use wisegate_core::{
+    ConfigProvider, RateLimiter, RateLimitConfig, RateLimitCleanupConfig,
+    ProxyConfig, request_handler, ip_filter, rate_limiter
+};
 use std::sync::Arc;
+use std::time::Duration;
 
-// Implement your own configuration
-struct MyConfig { /* ... */ }
-impl ConfigProvider for MyConfig { /* ... */ }
+// Implement your own configuration provider
+struct MyConfig {
+    rate_limit: RateLimitConfig,
+    proxy: ProxyConfig,
+    // ... your fields
+}
 
+impl ConfigProvider for MyConfig {
+    fn rate_limit_config(&self) -> &RateLimitConfig { &self.rate_limit }
+    fn proxy_config(&self) -> &ProxyConfig { &self.proxy }
+    // ... implement other methods
+}
+
+// Use the components
 let limiter = RateLimiter::new();
 let config = Arc::new(MyConfig::new());
 let http_client = reqwest::Client::new();
 
-// Use in your request handler
+// Full request handling pipeline
 let response = request_handler::handle_request(
     req, host, port, limiter, config, http_client
 ).await;
+
+// Or use individual components
+let is_blocked = ip_filter::is_ip_blocked("192.168.1.1", &config);
+let allowed = rate_limiter::check_rate_limit(&limiter, "192.168.1.1", &config).await;
 ```
 
 ## 🛠️ Development
