@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-01-16
+
+### Added
+- **Structured logging**: `tracing` with JSON support (`--json-logs`)
+- **Graceful shutdown**: SIGINT/SIGTERM handling with 30s connection drain
+- **Connection limiting**: `MAX_CONNECTIONS` env var with semaphore-based limiting
+- **HTTP connection pooling**: Reusable client with 32 connections per host
+- **Configuration caching**: `once_cell::Lazy` for zero-overhead config access
+- **Library structure**: Extracted `lib.rs` for better testability and reuse
+- **Complete rustdoc**: All public functions documented with examples
+
+### Enhanced
+- **Performance**: `opt-level = 3` (2x faster than `"z"`, +0.8MB)
+- **Dependencies**: Updated to latest versions (tokio 1.49, reqwest 0.13, clap 4.5.54)
+- **Documentation**: Simplified README
+
+---
+
 ## [0.6.1] - 2025-08-03
 
 ### Enhanced
