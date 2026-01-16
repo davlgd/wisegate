@@ -34,7 +34,8 @@ async fn main() {
     let rate_limiter = Arc::new(Mutex::new(HashMap::new()));
 
     // Bind to address
-    let bind_addr = SocketAddr::from(([0, 0, 0, 0], args.listen));
+    let bind_ip: std::net::IpAddr = args.bind.parse().expect("Invalid bind address");
+    let bind_addr = SocketAddr::from((bind_ip, args.listen));
     let listener = match TcpListener::bind(bind_addr).await {
         Ok(listener) => listener,
         Err(err) => {
@@ -61,13 +62,14 @@ async fn main() {
 
         let io = TokioIo::new(stream);
         let limiter = rate_limiter.clone();
+        let forward_host = args.bind.clone();
         let forward_port = args.forward;
         let verbose = args.verbose;
         let quiet = args.quiet;
 
         tokio::task::spawn(async move {
             let service = service_fn(move |req| {
-                request_handler::handle_request(req, forward_port, limiter.clone())
+                request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone())
             });
 
             if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
