@@ -49,12 +49,21 @@ pub fn extract_and_validate_real_ip(headers: &hyper::HeaderMap) -> Option<String
     }
 }
 
-/// Extract proxy IP from forwarded header 'by=' field
+/// Extract proxy IP from forwarded header 'by=' field (RFC 7239 compliant)
+/// Format: Forwarded: for=client;by=proxy, for=client2;by=proxy2
+/// Elements are separated by ',' and parameters within an element by ';'
 fn extract_proxy_ip_from_forwarded(forwarded: &str) -> Option<String> {
+    // RFC 7239: elements separated by ',', parameters by ';'
+    // We want the 'by=' parameter from the last element (closest proxy)
     forwarded
-        .split(';')
-        .find_map(|part| part.trim().strip_prefix("by="))
-        .map(|ip| ip.trim().to_string())
+        .split(',')
+        .last()
+        .and_then(|element| {
+            element
+                .split(';')
+                .find_map(|param| param.trim().strip_prefix("by="))
+        })
+        .and_then(|value| extract_ip_from_node_identifier(value))
 }
 
 /// Check if proxy IP is in the allowed list
@@ -77,20 +86,69 @@ fn extract_client_ip_from_xff(xff: &str) -> Option<String> {
         .map(|ip| ip.to_string())
 }
 
-/// Extract client IP from forwarded header 'for=' field
+/// Extract client IP from forwarded header 'for=' field (RFC 7239 compliant)
+/// Format: Forwarded: for=client;by=proxy, for=client2;by=proxy2
+/// Handles node identifiers: IP, "IP:port", "[IPv6]", "[IPv6]:port", "unknown", "secret"
 fn extract_client_ip_from_forwarded(forwarded: &str) -> Option<String> {
+    // RFC 7239: elements separated by ',', parameters by ';'
+    // We want the 'for=' parameter from the first element (original client)
     forwarded
-        .split(';')
-        .find_map(|part| part.trim().strip_prefix("for="))
-        .map(|ip_part| {
-            // Handle cases like "for=192.168.1.1:1234" or "for=192.168.1.1"
-            if let Some(colon_pos) = ip_part.find(':') {
-                ip_part[..colon_pos].trim().to_string()
-            } else {
-                ip_part.trim().to_string()
-            }
+        .split(',')
+        .next()
+        .and_then(|element| {
+            element
+                .split(';')
+                .find_map(|param| param.trim().strip_prefix("for="))
         })
+        .and_then(|value| extract_ip_from_node_identifier(value))
         .filter(|ip| is_valid_ip_format(ip))
+}
+
+/// Extract IP address from RFC 7239 node identifier
+/// Handles formats: IP, "IP:port", "[IPv6]", "[IPv6]:port", quoted values
+fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
+    let value = value.trim();
+
+    // Remove surrounding quotes if present (RFC 7239 allows quoted strings)
+    let value = value.trim_matches('"');
+
+    // Skip special tokens
+    if value.eq_ignore_ascii_case("unknown") || value.starts_with('_') {
+        return None;
+    }
+
+    // Handle bracketed IPv6 addresses: [IPv6] or [IPv6]:port
+    if value.starts_with('[') {
+        if let Some(bracket_end) = value.find(']') {
+            let ipv6 = &value[1..bracket_end];
+            if is_valid_ip_format(ipv6) {
+                return Some(ipv6.to_string());
+            }
+        }
+        return None;
+    }
+
+    // Handle IPv4 with optional port: IP or IP:port
+    // Count colons to distinguish IPv4:port from IPv6
+    let colon_count = value.chars().filter(|&c| c == ':').count();
+
+    if colon_count == 1 {
+        // IPv4 with port: "192.168.1.1:8080"
+        if let Some(colon_pos) = value.find(':') {
+            let ip = &value[..colon_pos];
+            if is_valid_ip_format(ip) {
+                return Some(ip.to_string());
+            }
+        }
+        return None;
+    }
+
+    // Plain IPv4 or unbracketed IPv6
+    if is_valid_ip_format(value) {
+        return Some(value.to_string());
+    }
+
+    None
 }
 
 /// Validates IP address format using std::net::IpAddr parsing
