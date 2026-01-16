@@ -64,7 +64,7 @@ impl TestEnvironment {
 
     fn build_wisegate(&self) -> Result<(), Box<dyn std::error::Error>> {
         let output = Command::new("cargo")
-            .args(&["build", "--release"])
+            .args(["build", "--release"])
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()?;
 
@@ -152,7 +152,7 @@ with socketserver.TCPServer(('localhost', {}), TestBackendHandler) as httpd:
     fn start_wisegate(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.wisegate_process = Some(
             Command::new("./target/release/wisegate")
-                .args(&[
+                .args([
                     "-l",
                     &self.wisegate_port.to_string(),
                     "-f",
@@ -178,7 +178,7 @@ with socketserver.TCPServer(('localhost', {}), TestBackendHandler) as httpd:
         while start.elapsed() < timeout {
             // Try to connect to the service
             if let Ok(output) = Command::new("curl")
-                .args(&[
+                .args([
                     "-s",
                     "-o",
                     "/dev/null",
@@ -226,19 +226,19 @@ fn make_request(
     headers: Option<&[(&str, &str)]>,
 ) -> Result<(u16, String), Box<dyn std::error::Error>> {
     let mut cmd = Command::new("curl");
-    cmd.args(&["-X", method])
-        .args(&[&format!("http://localhost:{}{path}", env.wisegate_port)])
-        .args(&["--max-time", "10"])
-        .args(&["-w", "%{http_code}"])
-        .args(&["-s"]);
+    cmd.args(["-X", method])
+        .args([&format!("http://localhost:{}{path}", env.wisegate_port)])
+        .args(["--max-time", "10"])
+        .args(["-w", "%{http_code}"])
+        .args(["-s"]);
 
     if let Some(data) = data {
-        cmd.args(&["--data", data]);
+        cmd.args(["--data", data]);
     }
 
     if let Some(headers) = headers {
         for (key, value) in headers {
-            cmd.args(&["-H", &format!("{key}: {value}")]);
+            cmd.args(["-H", &format!("{key}: {value}")]);
         }
     }
 
