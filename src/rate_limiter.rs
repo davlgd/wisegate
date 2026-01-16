@@ -42,8 +42,7 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::config;
-use crate::types::{RateLimitEntry, RateLimiter};
+use crate::types::{ConfigProvider, RateLimitEntry, RateLimiter};
 
 /// Tracks the last cleanup time to enforce minimum interval between cleanups.
 static LAST_CLEANUP: Mutex<Option<Instant>> = Mutex::const_new(None);
@@ -68,6 +67,7 @@ static LAST_CLEANUP: Mutex<Option<Instant>> = Mutex::const_new(None);
 ///
 /// * `limiter` - Shared rate limiter state
 /// * `ip` - Client IP address to check
+/// * `config` - Configuration provider for rate limit settings
 ///
 /// # Returns
 ///
@@ -79,13 +79,13 @@ static LAST_CLEANUP: Mutex<Option<Instant>> = Mutex::const_new(None);
 /// ```ignore
 /// use wisegate::rate_limiter::check_rate_limit;
 ///
-/// if !check_rate_limit(&limiter, &client_ip).await {
+/// if !check_rate_limit(&limiter, &client_ip, &config).await {
 ///     return Err(StatusCode::TOO_MANY_REQUESTS);
 /// }
 /// ```
-pub async fn check_rate_limit(limiter: &RateLimiter, ip: &str) -> bool {
-    let rate_config = config::get_rate_limit_config();
-    let cleanup_config = config::get_rate_limit_cleanup_config();
+pub async fn check_rate_limit(limiter: &RateLimiter, ip: &str, config: &impl ConfigProvider) -> bool {
+    let rate_config = config.rate_limit_config();
+    let cleanup_config = config.rate_limit_cleanup_config();
     let mut rate_map = limiter.inner().lock().await;
     let now = Instant::now();
 
