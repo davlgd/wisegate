@@ -65,7 +65,7 @@ fn print_security_config() {
 
     // Proxy mode
     match allowed_proxy_ips {
-        Some(ref ips) => println!("   Mode:           Strict (trusted proxies: {})", ips.len()),
+        Some(ips) => println!("   Mode:           Strict (trusted proxies: {})", ips.len()),
         None => println!("   Mode:           Permissive (no proxy validation)"),
     }
 

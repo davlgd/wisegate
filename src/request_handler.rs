@@ -75,7 +75,7 @@ pub async fn handle_request(
     }
 
     // Forward the request
-    forward_request(req, &forward_host, forward_port, &proxy_config).await
+    forward_request(req, &forward_host, forward_port, proxy_config).await
 }
 
 /// Forward request to upstream service
