@@ -1,3 +1,30 @@
+//! Configuration management for WiseGate.
+//!
+//! This module handles loading and caching configuration from environment variables.
+//! All configurations are computed once at first access and cached for the lifetime
+//! of the application using `once_cell::sync::Lazy`.
+//!
+//! # Caching
+//!
+//! Configuration values are read from environment variables only once, at startup.
+//! This provides:
+//! - Consistent configuration throughout the application lifetime
+//! - No runtime overhead from repeated environment lookups
+//! - Thread-safe access without locking
+//!
+//! # Example
+//!
+//! ```
+//! use wisegate::config;
+//!
+//! // Get cached configuration
+//! let rate_config = config::get_rate_limit_config();
+//! println!("Max requests: {}", rate_config.max_requests);
+//!
+//! let proxy_config = config::get_proxy_config();
+//! println!("Timeout: {:?}", proxy_config.timeout);
+//! ```
+
 use std::env;
 use std::str::FromStr;
 use std::time::Duration;
@@ -8,7 +35,10 @@ use tracing::warn;
 use crate::env_vars;
 use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
 
-// Cached configurations - computed once at first access
+// ============================================================================
+// Cached Configuration (computed once at first access)
+// ============================================================================
+
 static RATE_LIMIT_CONFIG: Lazy<RateLimitConfig> = Lazy::new(compute_rate_limit_config);
 static RATE_LIMIT_CLEANUP_CONFIG: Lazy<RateLimitCleanupConfig> =
     Lazy::new(compute_rate_limit_cleanup_config);
@@ -19,7 +49,10 @@ static BLOCKED_METHODS: Lazy<Vec<String>> = Lazy::new(compute_blocked_methods);
 static ALLOWED_PROXY_IPS: Lazy<Option<Vec<String>>> =
     Lazy::new(|| compute_allowed_proxy_ips_internal(|key| std::env::var(key)));
 
-// Default values
+// ============================================================================
+// Default Values
+// ============================================================================
+
 const DEFAULT_RATE_LIMIT_REQUESTS: u32 = 100;
 const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
 const DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD: usize = 10_000;
@@ -27,8 +60,9 @@ const DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS: u64 = 60;
 const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
 
-// Whitelist of allowed environment variable names for proxy IPs
-// This prevents arbitrary environment variable reading via TRUSTED_PROXY_IPS_VAR
+/// Whitelisted environment variable names for proxy IPs.
+///
+/// This prevents arbitrary environment variable disclosure via `TRUSTED_PROXY_IPS_VAR`.
 const ALLOWED_PROXY_VAR_NAMES: &[&str] = &[
     "TRUSTED_PROXY_IPS",
     "REVERSE_PROXY_IPS",
@@ -37,8 +71,13 @@ const ALLOWED_PROXY_VAR_NAMES: &[&str] = &[
     "PROXY_IPS",
 ];
 
-/// Helper function to parse environment variables with fallback to defaults
-/// Logs warnings for invalid values
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
+/// Parses an environment variable with fallback to a default value.
+///
+/// Logs a warning if the value exists but cannot be parsed.
 fn parse_env_var_or_default<T>(var_name: &str, default: T) -> T
 where
     T: FromStr + Copy,
@@ -55,7 +94,24 @@ where
     }
 }
 
-/// Get rate limiting configuration (cached)
+// ============================================================================
+// Public Configuration Getters
+// ============================================================================
+
+/// Returns the cached rate limiting configuration.
+///
+/// Configuration is read from environment variables on first access:
+/// - `RATE_LIMIT_REQUESTS`: Max requests per window (default: 100)
+/// - `RATE_LIMIT_WINDOW_SECS`: Window duration in seconds (default: 60)
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_rate_limit_config;
+///
+/// let config = get_rate_limit_config();
+/// println!("Allowing {} requests per {:?}", config.max_requests, config.window_duration);
+/// ```
 pub fn get_rate_limit_config() -> &'static RateLimitConfig {
     &RATE_LIMIT_CONFIG
 }
@@ -88,13 +144,29 @@ fn compute_rate_limit_config() -> RateLimitConfig {
     config
 }
 
-/// Get rate limiter cleanup configuration (cached)
+/// Returns the cached rate limiter cleanup configuration.
+///
+/// Controls automatic cleanup of expired entries to prevent memory exhaustion.
+///
+/// Configuration is read from environment variables on first access:
+/// - `RATE_LIMIT_CLEANUP_THRESHOLD`: Entry count before cleanup (default: 10000, 0 = disabled)
+/// - `RATE_LIMIT_CLEANUP_INTERVAL_SECS`: Minimum interval between cleanups (default: 60)
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_rate_limit_cleanup_config;
+///
+/// let config = get_rate_limit_cleanup_config();
+/// if config.is_enabled() {
+///     println!("Cleanup triggers at {} entries", config.threshold);
+/// }
+/// ```
 pub fn get_rate_limit_cleanup_config() -> &'static RateLimitCleanupConfig {
     &RATE_LIMIT_CLEANUP_CONFIG
 }
 
-/// Compute rate limiter cleanup configuration from environment variables
-/// Controls automatic cleanup of expired rate limit entries to prevent memory exhaustion
+/// Computes rate limiter cleanup configuration from environment variables.
 fn compute_rate_limit_cleanup_config() -> RateLimitCleanupConfig {
     let threshold = parse_env_var_or_default(
         env_vars::RATE_LIMIT_CLEANUP_THRESHOLD,
@@ -112,13 +184,27 @@ fn compute_rate_limit_cleanup_config() -> RateLimitCleanupConfig {
     }
 }
 
-/// Get proxy configuration (cached)
+/// Returns the cached proxy configuration.
+///
+/// Controls upstream request behavior including timeouts and size limits.
+///
+/// Configuration is read from environment variables on first access:
+/// - `PROXY_TIMEOUT_SECS`: Upstream request timeout (default: 30)
+/// - `MAX_BODY_SIZE_MB`: Maximum request body size (default: 100, 0 = unlimited)
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_proxy_config;
+///
+/// let config = get_proxy_config();
+/// println!("Timeout: {:?}, Max body: {}", config.timeout, config.max_body_size_mb());
+/// ```
 pub fn get_proxy_config() -> &'static ProxyConfig {
     &PROXY_CONFIG
 }
 
-/// Compute proxy configuration from environment variables
-/// Invalid values fall back to defaults and log warnings
+/// Computes proxy configuration from environment variables.
 fn compute_proxy_config() -> ProxyConfig {
     let timeout_secs =
         parse_env_var_or_default(env_vars::PROXY_TIMEOUT_SECS, DEFAULT_PROXY_TIMEOUT_SECS);
@@ -143,13 +229,35 @@ fn compute_proxy_config() -> ProxyConfig {
     config
 }
 
-/// Get list of allowed proxy IPs (cached)
+/// Returns the cached list of allowed proxy IPs, if configured.
+///
+/// When `Some`, WiseGate operates in strict mode, validating that requests
+/// come from trusted proxies. When `None`, permissive mode is used.
+///
+/// Configuration is read from environment variables on first access:
+/// - `CC_REVERSE_PROXY_IPS`: Primary variable for trusted proxy IPs
+/// - `TRUSTED_PROXY_IPS_VAR`: Alternative variable name (must be whitelisted)
+///
+/// # Returns
+///
+/// - `Some(&Vec<String>)`: List of trusted proxy IPs (strict mode)
+/// - `None`: No proxy validation (permissive mode)
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_allowed_proxy_ips;
+///
+/// match get_allowed_proxy_ips() {
+///     Some(ips) => println!("Strict mode with {} trusted proxies", ips.len()),
+///     None => println!("Permissive mode"),
+/// }
+/// ```
 pub fn get_allowed_proxy_ips() -> Option<&'static Vec<String>> {
     ALLOWED_PROXY_IPS.as_ref()
 }
 
-/// Compute allowed proxy IPs from environment
-/// Uses the simplified logic from env_vars to try primary then alternative variable
+/// Computes allowed proxy IPs from environment variables.
 fn compute_allowed_proxy_ips_internal<F>(env_var: F) -> Option<Vec<String>>
 where
     F: Fn(&str) -> Result<String, std::env::VarError>,
@@ -182,12 +290,25 @@ where
     None
 }
 
-/// Get list of blocked IPs (cached)
+/// Returns the cached list of blocked IP addresses.
+///
+/// Requests from these IPs will receive a 403 Forbidden response.
+///
+/// Configuration is read from `BLOCKED_IPS` environment variable on first access.
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_blocked_ips;
+///
+/// let blocked = get_blocked_ips();
+/// println!("{} IPs are blocked", blocked.len());
+/// ```
 pub fn get_blocked_ips() -> &'static Vec<String> {
     &BLOCKED_IPS
 }
 
-/// Compute blocked IPs from environment
+/// Computes blocked IPs from environment variable.
 fn compute_blocked_ips() -> Vec<String> {
     env::var(env_vars::BLOCKED_IPS)
         .unwrap_or_default()
@@ -197,12 +318,28 @@ fn compute_blocked_ips() -> Vec<String> {
         .collect()
 }
 
-/// Get list of blocked URL patterns (cached)
+/// Returns the cached list of blocked URL patterns.
+///
+/// Requests with URLs containing these patterns will receive a 404 Not Found response.
+/// Patterns are matched as substrings and also checked after URL decoding.
+///
+/// Configuration is read from `BLOCKED_PATTERNS` environment variable on first access.
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_blocked_patterns;
+///
+/// let patterns = get_blocked_patterns();
+/// for pattern in patterns.iter() {
+///     println!("Blocking URLs containing: {}", pattern);
+/// }
+/// ```
 pub fn get_blocked_patterns() -> &'static Vec<String> {
     &BLOCKED_PATTERNS
 }
 
-/// Compute blocked URL patterns from environment
+/// Computes blocked URL patterns from environment variable.
 fn compute_blocked_patterns() -> Vec<String> {
     env::var(env_vars::BLOCKED_PATTERNS)
         .unwrap_or_default()
@@ -212,12 +349,28 @@ fn compute_blocked_patterns() -> Vec<String> {
         .collect()
 }
 
-/// Get list of blocked HTTP methods (cached)
+/// Returns the cached list of blocked HTTP methods.
+///
+/// Requests using these methods will receive a 405 Method Not Allowed response.
+/// Method names are normalized to uppercase.
+///
+/// Configuration is read from `BLOCKED_METHODS` environment variable on first access.
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_blocked_methods;
+///
+/// let methods = get_blocked_methods();
+/// if methods.contains(&"DELETE".to_string()) {
+///     println!("DELETE requests are blocked");
+/// }
+/// ```
 pub fn get_blocked_methods() -> &'static Vec<String> {
     &BLOCKED_METHODS
 }
 
-/// Compute blocked HTTP methods from environment
+/// Computes blocked HTTP methods from environment variable.
 fn compute_blocked_methods() -> Vec<String> {
     env::var(env_vars::BLOCKED_METHODS)
         .unwrap_or_default()

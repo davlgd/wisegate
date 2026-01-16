@@ -1,3 +1,43 @@
+//! Rate limiting implementation for WiseGate.
+//!
+//! Provides per-IP rate limiting using a sliding window algorithm with
+//! automatic cleanup of expired entries to prevent memory exhaustion.
+//!
+//! # Algorithm
+//!
+//! Uses a simple sliding window approach:
+//! - Each IP has a counter and a timestamp of the last request
+//! - If the window has expired, the counter resets
+//! - If under the limit, the counter increments and the request is allowed
+//! - If over the limit, the request is denied
+//!
+//! # Memory Management
+//!
+//! To prevent memory exhaustion from tracking many unique IPs, the rate limiter
+//! performs automatic cleanup when:
+//! - Entry count exceeds the configured threshold
+//! - Minimum interval since last cleanup has passed
+//!
+//! # Thread Safety
+//!
+//! Uses `tokio::sync::Mutex` for async-friendly locking that won't block
+//! the Tokio thread pool.
+//!
+//! # Example
+//!
+//! ```ignore
+//! use wisegate::rate_limiter::check_rate_limit;
+//! use wisegate::types::RateLimiter;
+//!
+//! let limiter: RateLimiter = Arc::new(Mutex::new(HashMap::new()));
+//!
+//! if check_rate_limit(&limiter, "192.168.1.1").await {
+//!     // Request allowed
+//! } else {
+//!     // Rate limit exceeded
+//! }
+//! ```
+
 use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -5,20 +45,44 @@ use tracing::debug;
 use crate::config;
 use crate::types::RateLimiter;
 
-/// Tracks the last cleanup time to enforce minimum interval between cleanups
+/// Tracks the last cleanup time to enforce minimum interval between cleanups.
 static LAST_CLEANUP: Mutex<Option<Instant>> = Mutex::const_new(None);
 
-/// Rate limiting module
-/// Check if a request from the given IP should be rate limited
+/// Checks if a request from the given IP should be allowed based on rate limits.
 ///
-/// Uses a sliding window approach:
-/// - If window has expired, reset counter
-/// - If under limit, increment counter and allow
-/// - If over limit, deny request
+/// Returns `true` if the request is allowed, `false` if rate limited.
 ///
-/// Also performs periodic cleanup of expired entries to prevent memory exhaustion
+/// # Algorithm
 ///
-/// Uses tokio::sync::Mutex for async-friendly locking that won't block the thread pool
+/// 1. If the time window has expired for this IP, reset the counter
+/// 2. If the request count is under the limit, increment and allow
+/// 3. If the request count exceeds the limit, deny
+///
+/// # Cleanup
+///
+/// Automatically cleans up expired entries when:
+/// - Entry count exceeds `RATE_LIMIT_CLEANUP_THRESHOLD`
+/// - At least `RATE_LIMIT_CLEANUP_INTERVAL_SECS` since last cleanup
+///
+/// # Arguments
+///
+/// * `limiter` - Shared rate limiter state
+/// * `ip` - Client IP address to check
+///
+/// # Returns
+///
+/// - `true` - Request is allowed
+/// - `false` - Request is rate limited (should return 429)
+///
+/// # Example
+///
+/// ```ignore
+/// use wisegate::rate_limiter::check_rate_limit;
+///
+/// if !check_rate_limit(&limiter, &client_ip).await {
+///     return Err(StatusCode::TOO_MANY_REQUESTS);
+/// }
+/// ```
 pub async fn check_rate_limit(limiter: &RateLimiter, ip: &str) -> bool {
     let rate_config = config::get_rate_limit_config();
     let cleanup_config = config::get_rate_limit_cleanup_config();

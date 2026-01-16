@@ -1,18 +1,92 @@
+//! IP filtering and validation for WiseGate.
+//!
+//! This module handles:
+//! - Extraction of real client IPs from proxy headers
+//! - Validation of trusted proxy IPs
+//! - IP blocking/filtering
+//! - RFC 7239 compliant Forwarded header parsing
+//!
+//! # Security Model
+//!
+//! WiseGate operates in two modes:
+//!
+//! ## Strict Mode (proxy allowlist configured)
+//! - Requires both `x-forwarded-for` and `forwarded` headers
+//! - Validates proxy IP from `by=` field against allowlist
+//! - Extracts client IP from header chain
+//!
+//! ## Permissive Mode (no proxy allowlist)
+//! - Attempts to extract client IP from available headers
+//! - Falls back gracefully if headers are missing
+//!
+//! # Example
+//!
+//! ```ignore
+//! use wisegate::ip_filter;
+//! use hyper::HeaderMap;
+//!
+//! let headers = HeaderMap::new();
+//! if let Some(client_ip) = ip_filter::extract_and_validate_real_ip(&headers) {
+//!     if ip_filter::is_ip_blocked(&client_ip) {
+//!         // Reject request
+//!     }
+//! }
+//! ```
+
 use crate::config;
 
-/// Check if an IP address is in the blocked list
+/// Checks if an IP address is in the blocked list.
+///
+/// # Arguments
+///
+/// * `ip` - The IP address to check
+///
+/// # Returns
+///
+/// `true` if the IP is blocked, `false` otherwise
+///
+/// # Example
+///
+/// ```
+/// use wisegate::ip_filter::is_ip_blocked;
+///
+/// // Assuming BLOCKED_IPS is not set
+/// assert!(!is_ip_blocked("192.168.1.1"));
+/// ```
 pub fn is_ip_blocked(ip: &str) -> bool {
     let blocked_ips = config::get_blocked_ips();
     blocked_ips.iter().any(|blocked_ip| blocked_ip == ip)
 }
 
-/// This function implements the security model:
-/// 1. If proxy allowlist is configured: requires both x-forwarded-for and forwarded headers
-/// 2. If no proxy allowlist: attempts to extract client IP from available headers
-/// 3. Validates that the proxy IP (from 'by=' field) is in allowlist (if configured)
-/// 4. Extracts the real client IP (last valid IP in x-forwarded-for chain)
-/// 5. Validates the real client IP is not blocked
-/// 6. Returns the real client IP if all checks pass, otherwise None
+/// Extracts and validates the real client IP from request headers.
+///
+/// This function implements WiseGate's security model:
+///
+/// 1. **Strict mode** (proxy allowlist configured):
+///    - Requires both `x-forwarded-for` and `forwarded` headers
+///    - Validates proxy IP from `by=` field against allowlist
+///    - Extracts client IP from the last entry in `x-forwarded-for`
+///
+/// 2. **Permissive mode** (no proxy allowlist):
+///    - Attempts to extract client IP from available headers
+///    - Returns `None` if no valid IP can be extracted
+///
+/// # Arguments
+///
+/// * `headers` - HTTP request headers
+///
+/// # Returns
+///
+/// - `Some(String)` - The validated client IP address
+/// - `None` - If validation fails or no IP can be extracted
+///
+/// # Example
+///
+/// ```ignore
+/// use wisegate::ip_filter::extract_and_validate_real_ip;
+///
+/// let client_ip = extract_and_validate_real_ip(&request.headers());
+/// ```
 pub fn extract_and_validate_real_ip(headers: &hyper::HeaderMap) -> Option<String> {
     let has_proxy_allowlist = config::get_allowed_proxy_ips().is_some();
 
