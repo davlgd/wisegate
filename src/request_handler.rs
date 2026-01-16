@@ -1,10 +1,22 @@
 use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, StatusCode, body::Incoming};
+use once_cell::sync::Lazy;
 use std::convert::Infallible;
 
 use crate::config;
 use crate::types::RateLimiter;
 use crate::{ip_filter, rate_limiter};
+
+/// Shared HTTP client for connection pooling and reuse
+/// The client is configured once at startup and reused for all requests
+static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    let proxy_config = config::get_proxy_config();
+    reqwest::Client::builder()
+        .timeout(proxy_config.timeout)
+        .pool_max_idle_per_host(32)
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+});
 
 /// HTTP request handler with streaming support and improved error handling
 pub async fn handle_request(
@@ -13,8 +25,6 @@ pub async fn handle_request(
     forward_port: u16,
     limiter: RateLimiter,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
-    let proxy_config = config::get_proxy_config();
-
     // Extract and validate real client IP
     let real_client_ip = match ip_filter::extract_and_validate_real_ip(req.headers()) {
         Some(ip) => ip,
@@ -75,7 +85,7 @@ pub async fn handle_request(
     }
 
     // Forward the request
-    forward_request(req, &forward_host, forward_port, proxy_config).await
+    forward_request(req, &forward_host, forward_port).await
 }
 
 /// Forward request to upstream service
@@ -83,8 +93,8 @@ async fn forward_request(
     req: Request<Incoming>,
     host: &str,
     port: u16,
-    proxy_config: &crate::types::ProxyConfig,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
+    let proxy_config = config::get_proxy_config();
     let (parts, body) = req.into_parts();
     let body_bytes = match body.collect().await {
         Ok(bytes) => {
@@ -109,16 +119,15 @@ async fn forward_request(
         }
     };
 
-    forward_with_reqwest(parts, body_bytes, host, port, proxy_config).await
+    forward_with_reqwest(parts, body_bytes, host, port).await
 }
 
-/// Shared forwarding logic using reqwest with timeout support
+/// Shared forwarding logic using reqwest with connection pooling
 async fn forward_with_reqwest(
     parts: hyper::http::request::Parts,
     body_bytes: bytes::Bytes,
     host: &str,
     port: u16,
-    proxy_config: &crate::types::ProxyConfig,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     // Construct destination URI
     let destination_uri = format!(
@@ -128,11 +137,8 @@ async fn forward_with_reqwest(
         parts.uri.path_and_query().map_or("", |pq| pq.as_str())
     );
 
-    // Create reqwest client with timeout configuration
-    let client = reqwest::Client::builder()
-        .timeout(proxy_config.timeout)
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    // Use the shared HTTP client for connection pooling
+    let client = &*HTTP_CLIENT;
 
     // Build the request with method support for all HTTP verbs
     let mut req_builder = match parts.method.as_str() {
