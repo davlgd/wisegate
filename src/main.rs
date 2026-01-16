@@ -79,13 +79,13 @@ async fn main() {
                 request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone())
             });
 
-            if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-                if !quiet {
-                    if verbose {
-                        eprintln!("⚠️  Connection error from {addr}: {err}");
-                    } else {
-                        eprintln!("⚠️  Connection error: {err}");
-                    }
+            if let Err(err) = http1::Builder::new().serve_connection(io, service).await
+                && !quiet
+            {
+                if verbose {
+                    eprintln!("⚠️  Connection error from {addr}: {err}");
+                } else {
+                    eprintln!("⚠️  Connection error: {err}");
                 }
             }
         });

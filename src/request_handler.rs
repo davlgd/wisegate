@@ -68,10 +68,10 @@ pub async fn handle_request(
 
     // Add X-Real-IP header for upstream service (only if we have a real IP)
     let mut req = req;
-    if real_client_ip != "unknown" {
-        if let Ok(header_value) = real_client_ip.parse() {
-            req.headers_mut().insert("x-real-ip", header_value);
-        }
+    if real_client_ip != "unknown"
+        && let Ok(header_value) = real_client_ip.parse()
+    {
+        req.headers_mut().insert("x-real-ip", header_value);
     }
 
     // Forward the request
@@ -159,10 +159,11 @@ async fn forward_with_reqwest(
 
     // Add headers (excluding host and content-length)
     for (name, value) in parts.headers.iter() {
-        if name != "host" && name != "content-length" {
-            if let Ok(header_value) = value.to_str() {
-                req_builder = req_builder.header(name.as_str(), header_value);
-            }
+        if name != "host"
+            && name != "content-length"
+            && let Ok(header_value) = value.to_str()
+        {
+            req_builder = req_builder.header(name.as_str(), header_value);
         }
     }
 
@@ -196,13 +197,13 @@ async fn forward_with_reqwest(
                     for (name, value) in headers.iter() {
                         let header_name = name.as_str().to_lowercase();
                         // Skip hop-by-hop headers that shouldn't be forwarded
-                        if !is_hop_by_hop_header(&header_name) {
-                            if let (Ok(hyper_name), Ok(hyper_value)) = (
+                        if !is_hop_by_hop_header(&header_name)
+                            && let (Ok(hyper_name), Ok(hyper_value)) = (
                                 hyper::header::HeaderName::from_bytes(name.as_str().as_bytes()),
                                 hyper::header::HeaderValue::from_bytes(value.as_bytes()),
-                            ) {
-                                hyper_response.headers_mut().insert(hyper_name, hyper_value);
-                            }
+                            )
+                        {
+                            hyper_response.headers_mut().insert(hyper_name, hyper_value);
                         }
                     }
 
@@ -276,11 +277,11 @@ fn url_decode(input: &str) -> String {
         if c == '%' {
             // Try to read two hex digits
             let hex: String = chars.by_ref().take(2).collect();
-            if hex.len() == 2 {
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    result.push(byte as char);
-                    continue;
-                }
+            if hex.len() == 2
+                && let Ok(byte) = u8::from_str_radix(&hex, 16)
+            {
+                result.push(byte as char);
+                continue;
             }
             // If decoding failed, keep original characters
             result.push('%');
