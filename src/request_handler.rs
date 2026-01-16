@@ -232,11 +232,47 @@ pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full
 }
 
 /// Check if URL path contains any blocked patterns
+/// Decodes URL-encoded characters to prevent bypass via encoding (e.g., .ph%70 for .php)
 fn is_url_pattern_blocked(path: &str) -> bool {
     let blocked_patterns = config::get_blocked_patterns();
-    blocked_patterns
-        .iter()
-        .any(|pattern| path.contains(pattern))
+    if blocked_patterns.is_empty() {
+        return false;
+    }
+
+    // Decode URL-encoded path to prevent bypass attacks
+    let decoded_path = url_decode(path);
+
+    // Check against both original and decoded path
+    blocked_patterns.iter().any(|pattern| {
+        path.contains(pattern) || decoded_path.contains(pattern)
+    })
+}
+
+/// Decode URL-encoded string (percent-encoding)
+/// Handles common bypass attempts like %2e for '.', %70 for 'p', etc.
+fn url_decode(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            // Try to read two hex digits
+            let hex: String = chars.by_ref().take(2).collect();
+            if hex.len() == 2 {
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    result.push(byte as char);
+                    continue;
+                }
+            }
+            // If decoding failed, keep original characters
+            result.push('%');
+            result.push_str(&hex);
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
 }
 
 /// Check if HTTP method is blocked
