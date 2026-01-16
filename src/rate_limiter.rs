@@ -1,5 +1,6 @@
 use std::time::Instant;
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::config;
 use crate::types::RateLimiter;
@@ -48,10 +49,10 @@ pub async fn check_rate_limit(limiter: &RateLimiter, ip: &str) -> bool {
             rate_map.retain(|_, (last_time, _)| now.duration_since(*last_time) < expiry_threshold);
             let removed = before_count - rate_map.len();
             if removed > 0 {
-                eprintln!(
-                    "🧹 Rate limiter cleanup: removed {} expired entries ({} remaining)",
-                    removed,
-                    rate_map.len()
+                debug!(
+                    removed_entries = removed,
+                    remaining_entries = rate_map.len(),
+                    "Rate limiter cleanup completed"
                 );
             }
         }

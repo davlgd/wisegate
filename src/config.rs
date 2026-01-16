@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use once_cell::sync::Lazy;
+use tracing::warn;
 
 use crate::env_vars;
 use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
@@ -46,7 +47,7 @@ where
         Ok(value) => match value.parse() {
             Ok(parsed) => parsed,
             Err(_) => {
-                eprintln!("⚠️  Invalid value for {var_name}: '{value}', using default");
+                warn!(var = var_name, value = %value, "Invalid env var value, using default");
                 default
             }
         },
@@ -77,7 +78,7 @@ fn compute_rate_limit_config() -> RateLimitConfig {
 
     // Validate configuration
     if !config.is_valid() {
-        eprintln!("⚠️  Invalid rate limit configuration, using defaults");
+        warn!("Invalid rate limit configuration, using defaults");
         return RateLimitConfig {
             max_requests: DEFAULT_RATE_LIMIT_REQUESTS,
             window_duration: Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
@@ -132,7 +133,7 @@ fn compute_proxy_config() -> ProxyConfig {
 
     // Validate configuration
     if !config.is_valid() {
-        eprintln!("⚠️  Invalid proxy configuration, using defaults");
+        warn!("Invalid proxy configuration, using defaults");
         return ProxyConfig {
             timeout: Duration::from_secs(DEFAULT_PROXY_TIMEOUT_SECS),
             max_body_size: ProxyConfig::mb_to_bytes(DEFAULT_MAX_BODY_SIZE_MB),
@@ -170,9 +171,10 @@ where
         {
             return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
         } else if !ALLOWED_PROXY_VAR_NAMES.contains(&alt_var_name.as_str()) {
-            eprintln!(
-                "⚠️  Invalid TRUSTED_PROXY_IPS_VAR value '{}': must be one of {:?}",
-                alt_var_name, ALLOWED_PROXY_VAR_NAMES
+            warn!(
+                var = %alt_var_name,
+                allowed = ?ALLOWED_PROXY_VAR_NAMES,
+                "Invalid TRUSTED_PROXY_IPS_VAR value"
             );
         }
     }

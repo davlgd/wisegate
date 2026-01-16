@@ -57,6 +57,10 @@ pub struct Args {
         conflicts_with = "verbose"
     )]
     pub quiet: bool,
+
+    /// Output logs in JSON format (for structured logging)
+    #[arg(long, help = "Output logs in JSON format for structured logging")]
+    pub json_logs: bool,
 }
 
 impl Args {
