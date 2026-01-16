@@ -50,6 +50,7 @@ pub mod types;
 pub use config::{
     get_allowed_proxy_ips, get_blocked_ips, get_blocked_methods, get_blocked_patterns,
     get_max_connections, get_proxy_config, get_rate_limit_cleanup_config, get_rate_limit_config,
+    EnvVarConfig,
 };
 pub use types::{
     ConfigProvider, ProxyConfig, RateLimitCleanupConfig, RateLimitConfig, RateLimitEntry,
