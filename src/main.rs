@@ -8,8 +8,8 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Semaphore};
@@ -85,7 +85,10 @@ async fn main() {
     // Create connection limiter semaphore (0 = unlimited)
     let max_connections = config::get_max_connections();
     let connection_semaphore = if max_connections > 0 {
-        info!(max_connections = max_connections, "Connection limit configured");
+        info!(
+            max_connections = max_connections,
+            "Connection limit configured"
+        );
         Some(Arc::new(Semaphore::new(max_connections)))
     } else {
         warn!("No connection limit configured (MAX_CONNECTIONS=0)");
@@ -163,7 +166,10 @@ async fn main() {
     // Graceful shutdown: wait for active connections to finish
     let active = active_connections.load(Ordering::SeqCst);
     if active > 0 {
-        info!(active_connections = active, "Waiting for connections to finish...");
+        info!(
+            active_connections = active,
+            "Waiting for connections to finish..."
+        );
 
         let start = std::time::Instant::now();
         let timeout = Duration::from_secs(SHUTDOWN_TIMEOUT_SECS);
@@ -171,7 +177,10 @@ async fn main() {
         while active_connections.load(Ordering::SeqCst) > 0 {
             if start.elapsed() >= timeout {
                 let remaining = active_connections.load(Ordering::SeqCst);
-                warn!(remaining_connections = remaining, "Timeout reached, forcing shutdown");
+                warn!(
+                    remaining_connections = remaining,
+                    "Timeout reached, forcing shutdown"
+                );
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;

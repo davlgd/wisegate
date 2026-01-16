@@ -244,7 +244,7 @@ async fn forward_with_reqwest(
                             return Ok(create_error_response(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Failed to build response",
-                            ))
+                            ));
                         }
                     };
 
@@ -339,9 +339,9 @@ fn is_url_pattern_blocked(path: &str) -> bool {
     let decoded_path = url_decode(path);
 
     // Check against both original and decoded path
-    blocked_patterns.iter().any(|pattern| {
-        path.contains(pattern) || decoded_path.contains(pattern)
-    })
+    blocked_patterns
+        .iter()
+        .any(|pattern| path.contains(pattern) || decoded_path.contains(pattern))
 }
 
 /// Decode URL-encoded string (percent-encoding)
