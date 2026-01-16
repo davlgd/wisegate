@@ -119,6 +119,17 @@ pub const PROXY_TIMEOUT_SECS: &str = "PROXY_TIMEOUT_SECS";
 /// **Example**: `"50"`
 pub const MAX_BODY_SIZE_MB: &str = "MAX_BODY_SIZE_MB";
 
+/// Maximum number of concurrent connections.
+///
+/// Limits simultaneous connections to prevent resource exhaustion.
+/// New connections are rejected when the limit is reached.
+/// Set to `0` for unlimited connections (not recommended for production).
+///
+/// **Default**: `10000`
+///
+/// **Example**: `"5000"`
+pub const MAX_CONNECTIONS: &str = "MAX_CONNECTIONS";
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
@@ -149,5 +160,6 @@ pub fn all_env_vars() -> &'static [&'static str] {
         RATE_LIMIT_CLEANUP_INTERVAL_SECS,
         PROXY_TIMEOUT_SECS,
         MAX_BODY_SIZE_MB,
+        MAX_CONNECTIONS,
     ]
 }

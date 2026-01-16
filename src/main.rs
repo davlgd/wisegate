@@ -12,12 +12,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use wisegate::args::Args;
-use wisegate::{request_handler, server};
+use wisegate::{config, request_handler, server};
 
 /// Graceful shutdown timeout in seconds
 const SHUTDOWN_TIMEOUT_SECS: u64 = 30;
@@ -82,6 +82,16 @@ async fn main() {
         }
     };
 
+    // Create connection limiter semaphore (0 = unlimited)
+    let max_connections = config::get_max_connections();
+    let connection_semaphore = if max_connections > 0 {
+        info!(max_connections = max_connections, "Connection limit configured");
+        Some(Arc::new(Semaphore::new(max_connections)))
+    } else {
+        warn!("No connection limit configured (MAX_CONNECTIONS=0)");
+        None
+    };
+
     info!(port = args.listen, bind = %args.bind, "WiseGate is running");
 
     // Track active connections for graceful shutdown
@@ -100,6 +110,20 @@ async fn main() {
                     }
                 };
 
+                // Check connection limit before accepting
+                let permit = if let Some(ref semaphore) = connection_semaphore {
+                    match semaphore.clone().try_acquire_owned() {
+                        Ok(permit) => Some(permit),
+                        Err(_) => {
+                            warn!(client = %addr, max = max_connections, "Connection rejected: server at capacity");
+                            drop(stream);
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
+
                 debug!(client = %addr, "New connection");
 
                 let io = TokioIo::new(stream);
@@ -112,6 +136,9 @@ async fn main() {
                 connections.fetch_add(1, Ordering::SeqCst);
 
                 tokio::task::spawn(async move {
+                    // Keep permit alive for the duration of the connection
+                    let _permit = permit;
+
                     let service = service_fn(move |req| {
                         request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone())
                     });

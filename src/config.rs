@@ -48,6 +48,7 @@ static BLOCKED_PATTERNS: Lazy<Vec<String>> = Lazy::new(compute_blocked_patterns)
 static BLOCKED_METHODS: Lazy<Vec<String>> = Lazy::new(compute_blocked_methods);
 static ALLOWED_PROXY_IPS: Lazy<Option<Vec<String>>> =
     Lazy::new(|| compute_allowed_proxy_ips_internal(|key| std::env::var(key)));
+static MAX_CONNECTIONS: Lazy<usize> = Lazy::new(compute_max_connections);
 
 // ============================================================================
 // Default Values
@@ -59,6 +60,7 @@ const DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD: usize = 10_000;
 const DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS: u64 = 60;
 const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
+const DEFAULT_MAX_CONNECTIONS: usize = 10_000;
 
 /// Whitelisted environment variable names for proxy IPs.
 ///
@@ -227,6 +229,41 @@ fn compute_proxy_config() -> ProxyConfig {
     }
 
     config
+}
+
+/// Returns the cached maximum number of concurrent connections.
+///
+/// Limits simultaneous connections to prevent resource exhaustion under attack.
+/// When the limit is reached, new connections are rejected immediately.
+///
+/// Configuration is read from `MAX_CONNECTIONS` environment variable on first access.
+///
+/// # Returns
+///
+/// - `0`: Unlimited connections (not recommended for production)
+/// - `> 0`: Maximum number of concurrent connections
+///
+/// **Default**: `10000`
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_max_connections;
+///
+/// let max_conn = get_max_connections();
+/// if max_conn > 0 {
+///     println!("Limiting to {} concurrent connections", max_conn);
+/// } else {
+///     println!("Unlimited connections (not recommended)");
+/// }
+/// ```
+pub fn get_max_connections() -> usize {
+    *MAX_CONNECTIONS
+}
+
+/// Computes maximum connections from environment variable.
+fn compute_max_connections() -> usize {
+    parse_env_var_or_default(env_vars::MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS)
 }
 
 /// Returns the cached list of allowed proxy IPs, if configured.
