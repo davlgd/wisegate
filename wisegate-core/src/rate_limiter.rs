@@ -153,82 +153,7 @@ pub async fn check_rate_limit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{
-        ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
-        RateLimitConfig, RateLimitingProvider,
-    };
-    use std::time::Duration;
-
-    /// Test configuration for unit tests
-    struct TestConfig {
-        rate_limit: RateLimitConfig,
-        cleanup: RateLimitCleanupConfig,
-    }
-
-    impl TestConfig {
-        fn new(max_requests: u32, window_secs: u64) -> Self {
-            Self {
-                rate_limit: RateLimitConfig {
-                    max_requests,
-                    window_duration: Duration::from_secs(window_secs),
-                },
-                cleanup: RateLimitCleanupConfig {
-                    threshold: 0, // Disabled by default
-                    interval: Duration::from_secs(60),
-                },
-            }
-        }
-
-        #[allow(dead_code)]
-        fn with_cleanup(mut self, threshold: usize) -> Self {
-            self.cleanup.threshold = threshold;
-            self
-        }
-    }
-
-    impl RateLimitingProvider for TestConfig {
-        fn rate_limit_config(&self) -> &RateLimitConfig {
-            &self.rate_limit
-        }
-
-        fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
-            &self.cleanup
-        }
-    }
-
-    impl ProxyProvider for TestConfig {
-        fn proxy_config(&self) -> &ProxyConfig {
-            static CONFIG: ProxyConfig = ProxyConfig {
-                timeout: Duration::from_secs(30),
-                max_body_size: 100 * 1024 * 1024,
-            };
-            &CONFIG
-        }
-
-        fn allowed_proxy_ips(&self) -> Option<&[String]> {
-            None
-        }
-    }
-
-    impl FilteringProvider for TestConfig {
-        fn blocked_ips(&self) -> &[String] {
-            &[]
-        }
-
-        fn blocked_methods(&self) -> &[String] {
-            &[]
-        }
-
-        fn blocked_patterns(&self) -> &[String] {
-            &[]
-        }
-    }
-
-    impl ConnectionProvider for TestConfig {
-        fn max_connections(&self) -> usize {
-            10_000
-        }
-    }
+    use crate::test_utils::TestConfig;
 
     // ===========================================
     // Basic rate limiting tests
@@ -237,7 +162,7 @@ mod tests {
     #[tokio::test]
     async fn test_first_request_allowed() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(5, 60);
+        let config = TestConfig::new().with_rate_limit(5, 60);
 
         let allowed = check_rate_limit(&limiter, "192.168.1.1", &config).await;
         assert!(allowed);
@@ -246,7 +171,7 @@ mod tests {
     #[tokio::test]
     async fn test_requests_within_limit_allowed() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(5, 60);
+        let config = TestConfig::new().with_rate_limit(5, 60);
 
         for i in 0..5 {
             let allowed = check_rate_limit(&limiter, "192.168.1.1", &config).await;
@@ -257,7 +182,7 @@ mod tests {
     #[tokio::test]
     async fn test_request_exceeding_limit_blocked() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(3, 60);
+        let config = TestConfig::new().with_rate_limit(3, 60);
 
         // First 3 requests should be allowed
         for _ in 0..3 {
@@ -272,7 +197,7 @@ mod tests {
     #[tokio::test]
     async fn test_different_ips_independent() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(2, 60);
+        let config = TestConfig::new().with_rate_limit(2, 60);
 
         // IP 1 makes 2 requests
         assert!(check_rate_limit(&limiter, "192.168.1.1", &config).await);
@@ -288,7 +213,7 @@ mod tests {
     #[tokio::test]
     async fn test_counter_increments_correctly() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(5, 60);
+        let config = TestConfig::new().with_rate_limit(5, 60);
 
         // Make some requests
         check_rate_limit(&limiter, "192.168.1.1", &config).await;
@@ -308,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn test_limit_of_one() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(1, 60);
+        let config = TestConfig::new().with_rate_limit(1, 60);
 
         assert!(check_rate_limit(&limiter, "192.168.1.1", &config).await);
         assert!(!check_rate_limit(&limiter, "192.168.1.1", &config).await);
@@ -317,7 +242,7 @@ mod tests {
     #[tokio::test]
     async fn test_ipv6_addresses() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(2, 60);
+        let config = TestConfig::new().with_rate_limit(2, 60);
 
         assert!(check_rate_limit(&limiter, "::1", &config).await);
         assert!(check_rate_limit(&limiter, "::1", &config).await);
@@ -330,7 +255,7 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_blocked_requests() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(1, 60);
+        let config = TestConfig::new().with_rate_limit(1, 60);
 
         assert!(check_rate_limit(&limiter, "192.168.1.1", &config).await);
 
@@ -353,7 +278,7 @@ mod tests {
     async fn test_limiter_clone_shares_state() {
         let limiter1 = RateLimiter::new();
         let limiter2 = limiter1.clone();
-        let config = TestConfig::new(2, 60);
+        let config = TestConfig::new().with_rate_limit(2, 60);
 
         // Use limiter1 for first request
         assert!(check_rate_limit(&limiter1, "192.168.1.1", &config).await);
@@ -372,7 +297,7 @@ mod tests {
     #[tokio::test]
     async fn test_cleanup_disabled_when_threshold_zero() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(100, 60); // Cleanup disabled (threshold = 0)
+        let config = TestConfig::new().with_rate_limit(100, 60); // Cleanup disabled (threshold = 0)
 
         // Add many entries
         for i in 0..100 {
@@ -387,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn test_entries_tracked_per_ip() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(10, 60);
+        let config = TestConfig::new().with_rate_limit(10, 60);
 
         // Make requests from 5 different IPs
         for i in 0..5 {
@@ -404,8 +329,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_window_reset_after_expiration() {
+        use crate::types::{RateLimitCleanupConfig, RateLimitConfig};
+        use std::time::Duration;
+
         let limiter = RateLimiter::new();
-        // Use very short window for testing
+        // Use very short window for testing - need direct struct for milliseconds
         let config = TestConfig {
             rate_limit: RateLimitConfig {
                 max_requests: 2,
@@ -415,6 +343,7 @@ mod tests {
                 threshold: 0,
                 interval: Duration::from_secs(60),
             },
+            ..TestConfig::default()
         };
 
         // First two requests allowed
@@ -433,6 +362,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_window_reset_resets_counter() {
+        use crate::types::{RateLimitCleanupConfig, RateLimitConfig};
+        use std::time::Duration;
+
         let limiter = RateLimiter::new();
         let config = TestConfig {
             rate_limit: RateLimitConfig {
@@ -443,6 +375,7 @@ mod tests {
                 threshold: 0,
                 interval: Duration::from_secs(60),
             },
+            ..TestConfig::default()
         };
 
         // Use full quota
@@ -464,7 +397,7 @@ mod tests {
     #[tokio::test]
     async fn test_window_not_expired_keeps_count() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(5, 3600); // 1 hour window
+        let config = TestConfig::new().with_rate_limit(5, 3600); // 1 hour window
 
         // Make 3 requests
         for _ in 0..3 {
@@ -491,6 +424,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_different_ips_different_windows() {
+        use crate::types::{RateLimitCleanupConfig, RateLimitConfig};
+        use std::time::Duration;
+
         let limiter = RateLimiter::new();
         let config = TestConfig {
             rate_limit: RateLimitConfig {
@@ -501,6 +437,7 @@ mod tests {
                 threshold: 0,
                 interval: Duration::from_secs(60),
             },
+            ..TestConfig::default()
         };
 
         // IP1: exhaust quota
@@ -534,6 +471,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_cleanup_removes_expired_entries() {
+        use crate::types::{RateLimitCleanupConfig, RateLimitConfig};
+        use std::time::Duration;
+
         let limiter = RateLimiter::new();
         let config = TestConfig {
             rate_limit: RateLimitConfig {
@@ -544,6 +484,7 @@ mod tests {
                 threshold: 1,                       // Trigger cleanup when > 1 entry
                 interval: Duration::from_millis(1), // Allow frequent cleanup
             },
+            ..TestConfig::default()
         };
 
         // Add first entry
@@ -573,14 +514,14 @@ mod tests {
     #[tokio::test]
     async fn test_concurrent_requests_same_ip() {
         let limiter = RateLimiter::new();
-        let config = TestConfig::new(10, 60);
+        let config = TestConfig::new().with_rate_limit(10, 60);
 
         // Spawn multiple concurrent requests
         let mut handles = vec![];
         for _ in 0..10 {
             let limiter_clone = limiter.clone();
             let handle = tokio::spawn(async move {
-                let config = TestConfig::new(10, 60);
+                let config = TestConfig::new().with_rate_limit(10, 60);
                 check_rate_limit(&limiter_clone, "192.168.1.1", &config).await
             });
             handles.push(handle);
@@ -610,7 +551,7 @@ mod tests {
             let limiter_clone = limiter.clone();
             let ip = format!("192.168.1.{}", i);
             let handle = tokio::spawn(async move {
-                let config = TestConfig::new(5, 60);
+                let config = TestConfig::new().with_rate_limit(5, 60);
                 check_rate_limit(&limiter_clone, &ip, &config).await
             });
             handles.push(handle);

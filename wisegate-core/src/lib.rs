@@ -84,6 +84,8 @@ pub mod headers;
 pub mod ip_filter;
 pub mod rate_limiter;
 pub mod request_handler;
+#[cfg(test)]
+pub mod test_utils;
 pub mod types;
 
 // Re-export commonly used items at crate root

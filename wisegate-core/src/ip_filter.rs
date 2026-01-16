@@ -249,92 +249,7 @@ fn is_valid_ip_format(ip: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{
-        ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
-        RateLimitConfig, RateLimitingProvider,
-    };
-    use std::time::Duration;
-
-    /// Test configuration for unit tests
-    struct TestConfig {
-        allowed_proxy_ips: Option<Vec<String>>,
-        blocked_ips: Vec<String>,
-    }
-
-    impl TestConfig {
-        fn permissive() -> Self {
-            Self {
-                allowed_proxy_ips: None,
-                blocked_ips: vec![],
-            }
-        }
-
-        fn strict(allowed_proxies: Vec<&str>) -> Self {
-            Self {
-                allowed_proxy_ips: Some(allowed_proxies.into_iter().map(String::from).collect()),
-                blocked_ips: vec![],
-            }
-        }
-
-        fn with_blocked_ips(blocked: Vec<&str>) -> Self {
-            Self {
-                allowed_proxy_ips: None,
-                blocked_ips: blocked.into_iter().map(String::from).collect(),
-            }
-        }
-    }
-
-    impl RateLimitingProvider for TestConfig {
-        fn rate_limit_config(&self) -> &RateLimitConfig {
-            static CONFIG: RateLimitConfig = RateLimitConfig {
-                max_requests: 100,
-                window_duration: Duration::from_secs(60),
-            };
-            &CONFIG
-        }
-
-        fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
-            static CONFIG: RateLimitCleanupConfig = RateLimitCleanupConfig {
-                threshold: 10_000,
-                interval: Duration::from_secs(60),
-            };
-            &CONFIG
-        }
-    }
-
-    impl ProxyProvider for TestConfig {
-        fn proxy_config(&self) -> &ProxyConfig {
-            static CONFIG: ProxyConfig = ProxyConfig {
-                timeout: Duration::from_secs(30),
-                max_body_size: 100 * 1024 * 1024,
-            };
-            &CONFIG
-        }
-
-        fn allowed_proxy_ips(&self) -> Option<&[String]> {
-            self.allowed_proxy_ips.as_deref()
-        }
-    }
-
-    impl FilteringProvider for TestConfig {
-        fn blocked_ips(&self) -> &[String] {
-            &self.blocked_ips
-        }
-
-        fn blocked_methods(&self) -> &[String] {
-            &[]
-        }
-
-        fn blocked_patterns(&self) -> &[String] {
-            &[]
-        }
-    }
-
-    impl ConnectionProvider for TestConfig {
-        fn max_connections(&self) -> usize {
-            10_000
-        }
-    }
+    use crate::test_utils::TestConfig;
 
     // ===========================================
     // is_ip_blocked tests
@@ -342,14 +257,14 @@ mod tests {
 
     #[test]
     fn test_is_ip_blocked_when_blocked() {
-        let config = TestConfig::with_blocked_ips(vec!["192.168.1.100", "10.0.0.1"]);
+        let config = TestConfig::new().with_blocked_ips(vec!["192.168.1.100", "10.0.0.1"]);
         assert!(is_ip_blocked("192.168.1.100", &config));
         assert!(is_ip_blocked("10.0.0.1", &config));
     }
 
     #[test]
     fn test_is_ip_blocked_when_not_blocked() {
-        let config = TestConfig::with_blocked_ips(vec!["192.168.1.100"]);
+        let config = TestConfig::new().with_blocked_ips(vec!["192.168.1.100"]);
         assert!(!is_ip_blocked("192.168.1.101", &config));
         assert!(!is_ip_blocked("10.0.0.1", &config));
     }
@@ -362,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_is_ip_blocked_ipv6() {
-        let config = TestConfig::with_blocked_ips(vec!["::1", "2001:db8::1"]);
+        let config = TestConfig::new().with_blocked_ips(vec!["::1", "2001:db8::1"]);
         assert!(is_ip_blocked("::1", &config));
         assert!(is_ip_blocked("2001:db8::1", &config));
         assert!(!is_ip_blocked("2001:db8::2", &config));
