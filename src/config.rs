@@ -33,7 +33,7 @@ use once_cell::sync::Lazy;
 use tracing::warn;
 
 use crate::env_vars;
-use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+use crate::types::{ConfigProvider, ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
 
 // ============================================================================
 // Cached Configuration (computed once at first access)
@@ -415,6 +415,80 @@ fn compute_blocked_methods() -> Vec<String> {
         .map(|method| method.trim().to_uppercase())
         .filter(|method| !method.is_empty())
         .collect()
+}
+
+// ============================================================================
+// EnvVarConfig - ConfigProvider implementation using environment variables
+// ============================================================================
+
+/// Configuration provider that reads from environment variables.
+///
+/// This is the default configuration provider for WiseGate CLI.
+/// All values are cached at creation time using the global lazy statics.
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::EnvVarConfig;
+/// use wisegate::types::ConfigProvider;
+///
+/// let config = EnvVarConfig::new();
+/// println!("Max requests: {}", config.rate_limit_config().max_requests);
+/// ```
+#[derive(Clone, Debug)]
+pub struct EnvVarConfig {
+    // We use references to the global lazy statics for zero-copy access
+    _private: (),
+}
+
+impl EnvVarConfig {
+    /// Creates a new configuration provider from environment variables.
+    ///
+    /// This triggers lazy initialization of all configuration values
+    /// if they haven't been accessed yet.
+    pub fn new() -> Self {
+        Self { _private: () }
+    }
+}
+
+impl Default for EnvVarConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ConfigProvider for EnvVarConfig {
+    fn rate_limit_config(&self) -> &RateLimitConfig {
+        get_rate_limit_config()
+    }
+
+    fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
+        get_rate_limit_cleanup_config()
+    }
+
+    fn proxy_config(&self) -> &ProxyConfig {
+        get_proxy_config()
+    }
+
+    fn allowed_proxy_ips(&self) -> Option<&[String]> {
+        get_allowed_proxy_ips().map(|v| v.as_slice())
+    }
+
+    fn blocked_ips(&self) -> &[String] {
+        get_blocked_ips()
+    }
+
+    fn blocked_methods(&self) -> &[String] {
+        get_blocked_methods()
+    }
+
+    fn blocked_patterns(&self) -> &[String] {
+        get_blocked_patterns()
+    }
+
+    fn max_connections(&self) -> usize {
+        get_max_connections()
+    }
 }
 
 #[cfg(test)]
