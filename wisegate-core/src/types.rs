@@ -10,20 +10,83 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
-/// Trait for configuration injection.
+// ============================================================================
+// Composable Configuration Traits (Interface Segregation Principle)
+// ============================================================================
+
+/// Configuration for rate limiting behavior.
 ///
+/// Implement this trait to customize how rate limiting is applied.
+pub trait RateLimitingProvider: Send + Sync {
+    /// Returns the rate limiting configuration.
+    fn rate_limit_config(&self) -> &RateLimitConfig;
+
+    /// Returns the rate limiter cleanup configuration.
+    fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig;
+}
+
+/// Configuration for proxy behavior.
+///
+/// Implement this trait to customize upstream proxy settings.
+pub trait ProxyProvider: Send + Sync {
+    /// Returns the proxy configuration.
+    fn proxy_config(&self) -> &ProxyConfig;
+
+    /// Returns the list of allowed proxy IPs, if configured.
+    /// When `Some`, strict mode is enabled. When `None`, permissive mode is used.
+    fn allowed_proxy_ips(&self) -> Option<&[String]>;
+}
+
+/// Configuration for request filtering.
+///
+/// Implement this trait to customize which requests are blocked.
+pub trait FilteringProvider: Send + Sync {
+    /// Returns the list of blocked IP addresses.
+    fn blocked_ips(&self) -> &[String];
+
+    /// Returns the list of blocked HTTP methods.
+    fn blocked_methods(&self) -> &[String];
+
+    /// Returns the list of blocked URL patterns.
+    fn blocked_patterns(&self) -> &[String];
+}
+
+/// Configuration for connection limits.
+///
+/// Implement this trait to customize connection handling.
+pub trait ConnectionProvider: Send + Sync {
+    /// Returns the maximum number of concurrent connections.
+    fn max_connections(&self) -> usize;
+}
+
+// ============================================================================
+// ConfigProvider - Aggregated trait for full configuration
+// ============================================================================
+
+/// Trait for complete configuration injection.
+///
+/// This trait combines all specialized configuration traits into one.
 /// Implement this trait to provide configuration from any source:
 /// environment variables, files, remote services, etc.
+///
+/// For more granular control, implement the individual traits:
+/// - [`RateLimitingProvider`] for rate limiting settings
+/// - [`ProxyProvider`] for proxy behavior
+/// - [`FilteringProvider`] for request filtering
+/// - [`ConnectionProvider`] for connection limits
 ///
 /// # Example
 ///
 /// ```
-/// use wisegate_core::{ConfigProvider, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig};
+/// use wisegate_core::{
+///     RateLimitingProvider, ProxyProvider, FilteringProvider, ConnectionProvider,
+///     RateLimitConfig, RateLimitCleanupConfig, ProxyConfig,
+/// };
 /// use std::time::Duration;
 ///
 /// struct MyConfig;
 ///
-/// impl ConfigProvider for MyConfig {
+/// impl RateLimitingProvider for MyConfig {
 ///     fn rate_limit_config(&self) -> &RateLimitConfig {
 ///         static CONFIG: RateLimitConfig = RateLimitConfig {
 ///             max_requests: 100,
@@ -39,7 +102,9 @@ use tokio::sync::Mutex;
 ///         };
 ///         &CONFIG
 ///     }
+/// }
 ///
+/// impl ProxyProvider for MyConfig {
 ///     fn proxy_config(&self) -> &ProxyConfig {
 ///         static CONFIG: ProxyConfig = ProxyConfig {
 ///             timeout: Duration::from_secs(30),
@@ -49,37 +114,27 @@ use tokio::sync::Mutex;
 ///     }
 ///
 ///     fn allowed_proxy_ips(&self) -> Option<&[String]> { None }
+/// }
+///
+/// impl FilteringProvider for MyConfig {
 ///     fn blocked_ips(&self) -> &[String] { &[] }
 ///     fn blocked_methods(&self) -> &[String] { &[] }
 ///     fn blocked_patterns(&self) -> &[String] { &[] }
+/// }
+///
+/// impl ConnectionProvider for MyConfig {
 ///     fn max_connections(&self) -> usize { 10_000 }
 /// }
 /// ```
-pub trait ConfigProvider: Send + Sync {
-    /// Returns the rate limiting configuration.
-    fn rate_limit_config(&self) -> &RateLimitConfig;
+pub trait ConfigProvider:
+    RateLimitingProvider + ProxyProvider + FilteringProvider + ConnectionProvider
+{
+}
 
-    /// Returns the rate limiter cleanup configuration.
-    fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig;
-
-    /// Returns the proxy configuration.
-    fn proxy_config(&self) -> &ProxyConfig;
-
-    /// Returns the list of allowed proxy IPs, if configured.
-    /// When `Some`, strict mode is enabled. When `None`, permissive mode is used.
-    fn allowed_proxy_ips(&self) -> Option<&[String]>;
-
-    /// Returns the list of blocked IP addresses.
-    fn blocked_ips(&self) -> &[String];
-
-    /// Returns the list of blocked HTTP methods.
-    fn blocked_methods(&self) -> &[String];
-
-    /// Returns the list of blocked URL patterns.
-    fn blocked_patterns(&self) -> &[String];
-
-    /// Returns the maximum number of concurrent connections.
-    fn max_connections(&self) -> usize;
+// Blanket implementation: any type implementing all sub-traits is a ConfigProvider
+impl<T> ConfigProvider for T where
+    T: RateLimitingProvider + ProxyProvider + FilteringProvider + ConnectionProvider
+{
 }
 
 /// Configuration for rate limiting per IP address.

@@ -33,7 +33,10 @@ use once_cell::sync::Lazy;
 use tracing::warn;
 
 use crate::env_vars;
-use wisegate_core::{ConfigProvider, ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+use wisegate_core::{
+    ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
+    RateLimitConfig, RateLimitingProvider,
+};
 
 // ============================================================================
 // Cached Configuration (computed once at first access)
@@ -455,11 +458,17 @@ fn compute_blocked_methods() -> Vec<String> {
 /// This is the default configuration provider for WiseGate CLI.
 /// All values are cached at creation time using the global lazy statics.
 ///
+/// Implements all composable configuration traits:
+/// - [`RateLimitingProvider`] for rate limiting settings
+/// - [`ProxyProvider`] for proxy behavior
+/// - [`FilteringProvider`] for request filtering
+/// - [`ConnectionProvider`] for connection limits
+///
 /// # Example
 ///
 /// ```
 /// use wisegate::config::EnvVarConfig;
-/// use wisegate::types::ConfigProvider;
+/// use wisegate_core::RateLimitingProvider;
 ///
 /// let config = EnvVarConfig::new();
 /// println!("Max requests: {}", config.rate_limit_config().max_requests);
@@ -486,7 +495,7 @@ impl Default for EnvVarConfig {
     }
 }
 
-impl ConfigProvider for EnvVarConfig {
+impl RateLimitingProvider for EnvVarConfig {
     fn rate_limit_config(&self) -> &RateLimitConfig {
         get_rate_limit_config()
     }
@@ -494,7 +503,9 @@ impl ConfigProvider for EnvVarConfig {
     fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
         get_rate_limit_cleanup_config()
     }
+}
 
+impl ProxyProvider for EnvVarConfig {
     fn proxy_config(&self) -> &ProxyConfig {
         get_proxy_config()
     }
@@ -502,7 +513,9 @@ impl ConfigProvider for EnvVarConfig {
     fn allowed_proxy_ips(&self) -> Option<&[String]> {
         get_allowed_proxy_ips().map(|v| v.as_slice())
     }
+}
 
+impl FilteringProvider for EnvVarConfig {
     fn blocked_ips(&self) -> &[String] {
         get_blocked_ips()
     }
@@ -514,7 +527,9 @@ impl ConfigProvider for EnvVarConfig {
     fn blocked_patterns(&self) -> &[String] {
         get_blocked_patterns()
     }
+}
 
+impl ConnectionProvider for EnvVarConfig {
     fn max_connections(&self) -> usize {
         get_max_connections()
     }

@@ -398,7 +398,10 @@ fn is_hop_by_hop_header(header_name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+    use crate::types::{
+        ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
+        RateLimitConfig, RateLimitingProvider,
+    };
     use http_body_util::BodyExt;
     use std::time::Duration;
 
@@ -427,7 +430,7 @@ mod tests {
         }
     }
 
-    impl ConfigProvider for TestConfig {
+    impl RateLimitingProvider for TestConfig {
         fn rate_limit_config(&self) -> &RateLimitConfig {
             static CONFIG: RateLimitConfig = RateLimitConfig {
                 max_requests: 100,
@@ -443,7 +446,9 @@ mod tests {
             };
             &CONFIG
         }
+    }
 
+    impl ProxyProvider for TestConfig {
         fn proxy_config(&self) -> &ProxyConfig {
             static CONFIG: ProxyConfig = ProxyConfig {
                 timeout: Duration::from_secs(30),
@@ -455,7 +460,9 @@ mod tests {
         fn allowed_proxy_ips(&self) -> Option<&[String]> {
             None
         }
+    }
 
+    impl FilteringProvider for TestConfig {
         fn blocked_ips(&self) -> &[String] {
             &[]
         }
@@ -467,7 +474,9 @@ mod tests {
         fn blocked_patterns(&self) -> &[String] {
             &self.blocked_patterns
         }
+    }
 
+    impl ConnectionProvider for TestConfig {
         fn max_connections(&self) -> usize {
             10_000
         }
