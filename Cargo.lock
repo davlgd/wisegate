@@ -1271,6 +1271,20 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "wisegate-core",
+]
+
+[[package]]
+name = "wisegate-core"
+version = "0.7.2"
+dependencies = [
+ "bytes",
+ "http-body-util",
+ "hyper",
+ "once_cell",
+ "reqwest",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
