@@ -32,14 +32,14 @@ wisegate -l 8080 -f 9000
 
 ## ⚙️ CLI Options
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--listen` | `-l` | Port to listen on |
-| `--forward` | `-f` | Port to forward to |
-| `--bind` | `-b` | Bind address (default: `0.0.0.0`) |
-| `--verbose` | `-v` | Debug logging |
-| `--quiet` | `-q` | Errors only |
-| `--json-logs` | | JSON log format |
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--listen` | `-l` | `8080` | Port to listen on |
+| `--forward` | `-f` | `9000` | Port to forward to |
+| `--bind` | `-b` | `0.0.0.0` | Bind address |
+| `--verbose` | `-v` | | Debug logging |
+| `--quiet` | `-q` | | Errors only |
+| `--json-logs` | | | JSON log format |
 
 ## 🔧 Configuration
 

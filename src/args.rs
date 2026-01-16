@@ -71,7 +71,8 @@ pub struct Args {
         long,
         short = 'l',
         help = "Listen port for incoming connections",
-        value_name = "PORT"
+        value_name = "PORT",
+        default_value = "8080"
     )]
     pub listen: u16,
 
@@ -80,7 +81,8 @@ pub struct Args {
         long,
         short = 'f',
         help = "Destination port for forwarded requests",
-        value_name = "PORT"
+        value_name = "PORT",
+        default_value = "9000"
     )]
     pub forward: u16,
 
