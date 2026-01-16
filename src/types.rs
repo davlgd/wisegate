@@ -140,12 +140,36 @@ impl ProxyConfig {
     }
 }
 
+/// Entry for tracking rate limit state per IP address.
+///
+/// Stores the timestamp of the window start and the request count.
+#[derive(Clone, Debug)]
+pub struct RateLimitEntry {
+    /// Timestamp of the first request in the current window
+    pub window_start: Instant,
+    /// Number of requests in the current window
+    pub request_count: u32,
+}
+
+impl RateLimitEntry {
+    /// Creates a new rate limit entry with count of 1.
+    pub fn new() -> Self {
+        Self {
+            window_start: Instant::now(),
+            request_count: 1,
+        }
+    }
+}
+
+impl Default for RateLimitEntry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Thread-safe rate limiter state shared across all connections.
 ///
-/// Maps IP addresses to their request tracking data:
-/// - `Instant`: Timestamp of the last request
-/// - `u32`: Number of requests in the current window
-///
+/// Wraps a HashMap mapping IP addresses to their rate limit entries.
 /// Uses `tokio::sync::Mutex` for async-friendly locking that won't block
 /// the Tokio thread pool.
 ///
@@ -153,10 +177,30 @@ impl ProxyConfig {
 ///
 /// ```
 /// use wisegate::types::RateLimiter;
-/// use std::collections::HashMap;
-/// use std::sync::Arc;
-/// use tokio::sync::Mutex;
 ///
-/// let limiter: RateLimiter = Arc::new(Mutex::new(HashMap::new()));
+/// let limiter = RateLimiter::new();
 /// ```
-pub type RateLimiter = Arc<Mutex<HashMap<String, (Instant, u32)>>>;
+#[derive(Clone)]
+pub struct RateLimiter {
+    inner: Arc<Mutex<HashMap<String, RateLimitEntry>>>,
+}
+
+impl RateLimiter {
+    /// Creates a new empty rate limiter.
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Returns a reference to the inner mutex-protected map.
+    pub fn inner(&self) -> &Arc<Mutex<HashMap<String, RateLimitEntry>>> {
+        &self.inner
+    }
+}
+
+impl Default for RateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
