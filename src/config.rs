@@ -127,23 +127,22 @@ where
     F: Fn(&str) -> Result<String, std::env::VarError>,
 {
     // Try primary variable first
-    if let Ok(ips) = env_var(env_vars::ALLOWED_PROXY_IPS) {
-        if !ips.trim().is_empty() {
-            return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
-        }
+    if let Ok(ips) = env_var(env_vars::ALLOWED_PROXY_IPS)
+        && !ips.trim().is_empty()
+    {
+        return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
     }
 
     // Try user-defined alternative variable if set (only from whitelist)
     if let Ok(alt_var_name) = env_var(env_vars::TRUSTED_PROXY_IPS_VAR) {
         // Security: only allow reading from whitelisted variable names
         // This prevents arbitrary environment variable disclosure
-        if ALLOWED_PROXY_VAR_NAMES.contains(&alt_var_name.as_str()) {
-            if let Ok(ips) = env_var(&alt_var_name) {
-                if !ips.trim().is_empty() {
-                    return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
-                }
-            }
-        } else {
+        if ALLOWED_PROXY_VAR_NAMES.contains(&alt_var_name.as_str())
+            && let Ok(ips) = env_var(&alt_var_name)
+            && !ips.trim().is_empty()
+        {
+            return Some(ips.split(',').map(|ip| ip.trim().to_string()).collect());
+        } else if !ALLOWED_PROXY_VAR_NAMES.contains(&alt_var_name.as_str()) {
             eprintln!(
                 "⚠️  Invalid TRUSTED_PROXY_IPS_VAR value '{}': must be one of {:?}",
                 alt_var_name, ALLOWED_PROXY_VAR_NAMES

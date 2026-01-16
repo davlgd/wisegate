@@ -57,13 +57,13 @@ fn extract_proxy_ip_from_forwarded(forwarded: &str) -> Option<String> {
     // We want the 'by=' parameter from the last element (closest proxy)
     forwarded
         .split(',')
-        .last()
+        .next_back()
         .and_then(|element| {
             element
                 .split(';')
                 .find_map(|param| param.trim().strip_prefix("by="))
         })
-        .and_then(|value| extract_ip_from_node_identifier(value))
+        .and_then(extract_ip_from_node_identifier)
 }
 
 /// Check if proxy IP is in the allowed list
@@ -81,8 +81,7 @@ fn extract_client_ip_from_xff(xff: &str) -> Option<String> {
     xff.split(',')
         .map(|ip| ip.trim())
         .filter(|ip| !ip.is_empty())
-        .filter(|ip| is_valid_ip_format(ip))
-        .next_back() // Get last element efficiently (O(1) vs last()'s O(n))
+        .rfind(|ip| is_valid_ip_format(ip))
         .map(|ip| ip.to_string())
 }
 
@@ -100,7 +99,7 @@ fn extract_client_ip_from_forwarded(forwarded: &str) -> Option<String> {
                 .split(';')
                 .find_map(|param| param.trim().strip_prefix("for="))
         })
-        .and_then(|value| extract_ip_from_node_identifier(value))
+        .and_then(extract_ip_from_node_identifier)
         .filter(|ip| is_valid_ip_format(ip))
 }
 
