@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-01-16
+
+### Refactored
+- **NewType RateLimiter**: Replaced type alias with proper struct for better encapsulation
+- **RateLimitEntry struct**: Named fields instead of tuple for clearer code
+- **StartupConfig**: Decoupled `server.rs` from CLI `Args` struct
+- **IP validation**: `validate()` now returns parsed `IpAddr` to avoid double parsing
+
+---
+
 ## [0.7.0] - 2026-01-16
 
 ### Added
