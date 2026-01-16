@@ -1122,7 +1122,7 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 
 [[package]]
 name = "wisegate"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "clap",
  "hyper",
@@ -1137,7 +1137,7 @@ dependencies = [
 
 [[package]]
 name = "wisegate-core"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "http-body-util",
