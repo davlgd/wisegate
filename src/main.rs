@@ -16,6 +16,7 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use wisegate::args::Args;
+use wisegate::config::EnvVarConfig;
 use wisegate::server::StartupConfig;
 use wisegate::types::RateLimiter;
 use wisegate::{config, request_handler, server};
@@ -73,8 +74,9 @@ async fn main() {
     };
     server::print_startup_info(&startup_config);
 
-    // Initialize rate limiter
+    // Initialize rate limiter and config provider
     let rate_limiter = RateLimiter::new();
+    let env_config = Arc::new(EnvVarConfig::new());
 
     // Create socket address (IP already validated)
     let bind_addr = SocketAddr::from((bind_ip, args.listen));
@@ -138,6 +140,7 @@ async fn main() {
                 let forward_host = args.bind.clone();
                 let forward_port = args.forward;
                 let connections = active_connections.clone();
+                let config = env_config.clone();
 
                 // Increment active connection count
                 connections.fetch_add(1, Ordering::SeqCst);
@@ -147,7 +150,7 @@ async fn main() {
                     let _permit = permit;
 
                     let service = service_fn(move |req| {
-                        request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone())
+                        request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone(), config.clone())
                     });
 
                     if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
