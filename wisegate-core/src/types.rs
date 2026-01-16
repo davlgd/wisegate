@@ -276,3 +276,203 @@ impl Default for RateLimiter {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===========================================
+    // RateLimitConfig tests
+    // ===========================================
+
+    #[test]
+    fn test_rate_limit_config_valid() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_duration: Duration::from_secs(60),
+        };
+        assert!(config.is_valid());
+    }
+
+    #[test]
+    fn test_rate_limit_config_invalid_zero_requests() {
+        let config = RateLimitConfig {
+            max_requests: 0,
+            window_duration: Duration::from_secs(60),
+        };
+        assert!(!config.is_valid());
+    }
+
+    #[test]
+    fn test_rate_limit_config_invalid_zero_duration() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_duration: Duration::ZERO,
+        };
+        assert!(!config.is_valid());
+    }
+
+    #[test]
+    fn test_rate_limit_config_invalid_both_zero() {
+        let config = RateLimitConfig {
+            max_requests: 0,
+            window_duration: Duration::ZERO,
+        };
+        assert!(!config.is_valid());
+    }
+
+    // ===========================================
+    // RateLimitCleanupConfig tests
+    // ===========================================
+
+    #[test]
+    fn test_cleanup_config_enabled() {
+        let config = RateLimitCleanupConfig {
+            threshold: 10_000,
+            interval: Duration::from_secs(60),
+        };
+        assert!(config.is_enabled());
+    }
+
+    #[test]
+    fn test_cleanup_config_disabled_zero_threshold() {
+        let config = RateLimitCleanupConfig {
+            threshold: 0,
+            interval: Duration::from_secs(60),
+        };
+        assert!(!config.is_enabled());
+    }
+
+    #[test]
+    fn test_cleanup_config_enabled_with_one() {
+        let config = RateLimitCleanupConfig {
+            threshold: 1,
+            interval: Duration::from_secs(1),
+        };
+        assert!(config.is_enabled());
+    }
+
+    // ===========================================
+    // ProxyConfig tests
+    // ===========================================
+
+    #[test]
+    fn test_proxy_config_valid() {
+        let config = ProxyConfig {
+            timeout: Duration::from_secs(30),
+            max_body_size: 100 * 1024 * 1024,
+        };
+        assert!(config.is_valid());
+    }
+
+    #[test]
+    fn test_proxy_config_invalid_zero_timeout() {
+        let config = ProxyConfig {
+            timeout: Duration::ZERO,
+            max_body_size: 100 * 1024 * 1024,
+        };
+        assert!(!config.is_valid());
+    }
+
+    #[test]
+    fn test_proxy_config_valid_unlimited_body() {
+        let config = ProxyConfig {
+            timeout: Duration::from_secs(30),
+            max_body_size: 0, // unlimited
+        };
+        assert!(config.is_valid());
+    }
+
+    #[test]
+    fn test_proxy_config_max_body_size_mb_unlimited() {
+        let config = ProxyConfig {
+            timeout: Duration::from_secs(30),
+            max_body_size: 0,
+        };
+        assert_eq!(config.max_body_size_mb(), "unlimited");
+    }
+
+    #[test]
+    fn test_proxy_config_max_body_size_mb_100() {
+        let config = ProxyConfig {
+            timeout: Duration::from_secs(30),
+            max_body_size: 100 * 1024 * 1024,
+        };
+        assert_eq!(config.max_body_size_mb(), "100");
+    }
+
+    #[test]
+    fn test_proxy_config_max_body_size_mb_1() {
+        let config = ProxyConfig {
+            timeout: Duration::from_secs(30),
+            max_body_size: 1 * 1024 * 1024,
+        };
+        assert_eq!(config.max_body_size_mb(), "1");
+    }
+
+    #[test]
+    fn test_proxy_config_mb_to_bytes() {
+        assert_eq!(ProxyConfig::mb_to_bytes(0), 0);
+        assert_eq!(ProxyConfig::mb_to_bytes(1), 1024 * 1024);
+        assert_eq!(ProxyConfig::mb_to_bytes(100), 100 * 1024 * 1024);
+        assert_eq!(ProxyConfig::mb_to_bytes(1024), 1024 * 1024 * 1024);
+    }
+
+    // ===========================================
+    // RateLimitEntry tests
+    // ===========================================
+
+    #[test]
+    fn test_rate_limit_entry_new() {
+        let entry = RateLimitEntry::new();
+        assert_eq!(entry.request_count, 1);
+        // window_start should be close to now (within a few ms)
+        assert!(entry.window_start.elapsed() < Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_rate_limit_entry_default() {
+        let entry = RateLimitEntry::default();
+        assert_eq!(entry.request_count, 1);
+    }
+
+    // ===========================================
+    // RateLimiter tests
+    // ===========================================
+
+    #[tokio::test]
+    async fn test_rate_limiter_new_is_empty() {
+        let limiter = RateLimiter::new();
+        let inner = limiter.inner().lock().await;
+        assert!(inner.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_default_is_empty() {
+        let limiter = RateLimiter::default();
+        let inner = limiter.inner().lock().await;
+        assert!(inner.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_can_insert_and_retrieve() {
+        let limiter = RateLimiter::new();
+        {
+            let mut inner = limiter.inner().lock().await;
+            inner.insert("192.168.1.1".to_string(), RateLimitEntry::new());
+        }
+        {
+            let inner = limiter.inner().lock().await;
+            assert!(inner.contains_key("192.168.1.1"));
+            assert_eq!(inner.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_rate_limiter_clone() {
+        let limiter1 = RateLimiter::new();
+        let limiter2 = limiter1.clone();
+        // Both should point to the same inner Arc
+        assert!(Arc::ptr_eq(limiter1.inner(), limiter2.inner()));
+    }
+}

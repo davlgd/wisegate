@@ -394,3 +394,320 @@ fn is_hop_by_hop_header(header_name: &str) -> bool {
             | "upgrade"
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{ProxyConfig, RateLimitCleanupConfig, RateLimitConfig};
+    use http_body_util::BodyExt;
+    use std::time::Duration;
+
+    /// Test configuration for unit tests
+    struct TestConfig {
+        blocked_methods: Vec<String>,
+        blocked_patterns: Vec<String>,
+    }
+
+    impl TestConfig {
+        fn new() -> Self {
+            Self {
+                blocked_methods: vec![],
+                blocked_patterns: vec![],
+            }
+        }
+
+        fn with_blocked_methods(mut self, methods: Vec<&str>) -> Self {
+            self.blocked_methods = methods.into_iter().map(String::from).collect();
+            self
+        }
+
+        fn with_blocked_patterns(mut self, patterns: Vec<&str>) -> Self {
+            self.blocked_patterns = patterns.into_iter().map(String::from).collect();
+            self
+        }
+    }
+
+    impl ConfigProvider for TestConfig {
+        fn rate_limit_config(&self) -> &RateLimitConfig {
+            static CONFIG: RateLimitConfig = RateLimitConfig {
+                max_requests: 100,
+                window_duration: Duration::from_secs(60),
+            };
+            &CONFIG
+        }
+
+        fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
+            static CONFIG: RateLimitCleanupConfig = RateLimitCleanupConfig {
+                threshold: 10_000,
+                interval: Duration::from_secs(60),
+            };
+            &CONFIG
+        }
+
+        fn proxy_config(&self) -> &ProxyConfig {
+            static CONFIG: ProxyConfig = ProxyConfig {
+                timeout: Duration::from_secs(30),
+                max_body_size: 100 * 1024 * 1024,
+            };
+            &CONFIG
+        }
+
+        fn allowed_proxy_ips(&self) -> Option<&[String]> {
+            None
+        }
+
+        fn blocked_ips(&self) -> &[String] {
+            &[]
+        }
+
+        fn blocked_methods(&self) -> &[String] {
+            &self.blocked_methods
+        }
+
+        fn blocked_patterns(&self) -> &[String] {
+            &self.blocked_patterns
+        }
+
+        fn max_connections(&self) -> usize {
+            10_000
+        }
+    }
+
+    // ===========================================
+    // url_decode tests
+    // ===========================================
+
+    #[test]
+    fn test_url_decode_no_encoding() {
+        assert_eq!(url_decode("/path/to/file"), "/path/to/file");
+        assert_eq!(url_decode("hello"), "hello");
+        assert_eq!(url_decode(""), "");
+    }
+
+    #[test]
+    fn test_url_decode_simple_encoding() {
+        assert_eq!(url_decode("%20"), " ");
+        assert_eq!(url_decode("hello%20world"), "hello world");
+        assert_eq!(url_decode("%2F"), "/");
+    }
+
+    #[test]
+    fn test_url_decode_dot_encoding() {
+        // Common bypass attempts
+        assert_eq!(url_decode("%2e"), ".");
+        assert_eq!(url_decode("%2E"), ".");
+        assert_eq!(url_decode(".%2ephp"), "..php");
+    }
+
+    #[test]
+    fn test_url_decode_php_bypass() {
+        // Attacker tries to bypass .php blocking
+        assert_eq!(url_decode(".ph%70"), ".php");
+        assert_eq!(url_decode("%2ephp"), ".php");
+        assert_eq!(url_decode(".%70%68%70"), ".php");
+    }
+
+    #[test]
+    fn test_url_decode_env_bypass() {
+        // Attacker tries to bypass .env blocking
+        assert_eq!(url_decode(".%65nv"), ".env");
+        assert_eq!(url_decode("%2eenv"), ".env");
+        assert_eq!(url_decode("%2e%65%6e%76"), ".env");
+    }
+
+    #[test]
+    fn test_url_decode_multiple_encodings() {
+        assert_eq!(url_decode("%2F%2e%2e%2Fetc%2Fpasswd"), "/../etc/passwd");
+    }
+
+    #[test]
+    fn test_url_decode_invalid_hex() {
+        // Invalid hex should be preserved
+        assert_eq!(url_decode("%GG"), "%GG");
+        assert_eq!(url_decode("%"), "%");
+        assert_eq!(url_decode("%2"), "%2");
+        assert_eq!(url_decode("%ZZ"), "%ZZ");
+    }
+
+    #[test]
+    fn test_url_decode_mixed_content() {
+        assert_eq!(url_decode("path%2Fto%2Ffile.txt"), "path/to/file.txt");
+        assert_eq!(url_decode("hello%20%26%20world"), "hello & world");
+    }
+
+    #[test]
+    fn test_url_decode_unicode() {
+        // UTF-8 encoded characters
+        assert_eq!(url_decode("%C3%A9"), "é"); // é in UTF-8
+        assert_eq!(url_decode("caf%C3%A9"), "café");
+    }
+
+    // ===========================================
+    // is_url_pattern_blocked tests
+    // ===========================================
+
+    #[test]
+    fn test_url_pattern_blocked_simple() {
+        let config = TestConfig::new().with_blocked_patterns(vec![".php", ".env"]);
+
+        assert!(is_url_pattern_blocked("/file.php", &config));
+        assert!(is_url_pattern_blocked("/.env", &config));
+        assert!(is_url_pattern_blocked("/path/to/file.php", &config));
+    }
+
+    #[test]
+    fn test_url_pattern_not_blocked() {
+        let config = TestConfig::new().with_blocked_patterns(vec![".php", ".env"]);
+
+        assert!(!is_url_pattern_blocked("/file.html", &config));
+        assert!(!is_url_pattern_blocked("/path/to/file.js", &config));
+        assert!(!is_url_pattern_blocked("/", &config));
+    }
+
+    #[test]
+    fn test_url_pattern_blocked_empty_patterns() {
+        let config = TestConfig::new();
+
+        assert!(!is_url_pattern_blocked("/file.php", &config));
+        assert!(!is_url_pattern_blocked("/.env", &config));
+    }
+
+    #[test]
+    fn test_url_pattern_blocked_bypass_attempt() {
+        let config = TestConfig::new().with_blocked_patterns(vec![".php", ".env", "admin"]);
+
+        // URL-encoded bypass attempts should still be blocked
+        assert!(is_url_pattern_blocked("/.ph%70", &config)); // .php
+        assert!(is_url_pattern_blocked("/%2eenv", &config)); // .env
+        assert!(is_url_pattern_blocked("/adm%69n", &config)); // admin
+    }
+
+    #[test]
+    fn test_url_pattern_blocked_double_encoding_attempt() {
+        let config = TestConfig::new().with_blocked_patterns(vec![".php"]);
+
+        // Single encoding should be caught
+        assert!(is_url_pattern_blocked("/.ph%70", &config));
+    }
+
+    #[test]
+    fn test_url_pattern_blocked_case_sensitive() {
+        let config = TestConfig::new().with_blocked_patterns(vec![".PHP"]);
+
+        // Pattern matching is case-sensitive
+        assert!(is_url_pattern_blocked("/file.PHP", &config));
+        assert!(!is_url_pattern_blocked("/file.php", &config)); // Different case
+    }
+
+    #[test]
+    fn test_url_pattern_blocked_partial_match() {
+        let config = TestConfig::new().with_blocked_patterns(vec!["admin"]);
+
+        assert!(is_url_pattern_blocked("/admin/panel", &config));
+        assert!(is_url_pattern_blocked("/path/admin", &config));
+        assert!(is_url_pattern_blocked("/administrator", &config)); // Contains "admin"
+    }
+
+    // ===========================================
+    // is_method_blocked tests
+    // ===========================================
+
+    #[test]
+    fn test_method_blocked() {
+        let config = TestConfig::new().with_blocked_methods(vec!["TRACE", "CONNECT"]);
+
+        assert!(is_method_blocked("TRACE", &config));
+        assert!(is_method_blocked("CONNECT", &config));
+    }
+
+    #[test]
+    fn test_method_not_blocked() {
+        let config = TestConfig::new().with_blocked_methods(vec!["TRACE", "CONNECT"]);
+
+        assert!(!is_method_blocked("GET", &config));
+        assert!(!is_method_blocked("POST", &config));
+        assert!(!is_method_blocked("PUT", &config));
+        assert!(!is_method_blocked("DELETE", &config));
+    }
+
+    #[test]
+    fn test_method_blocked_empty_list() {
+        let config = TestConfig::new();
+
+        assert!(!is_method_blocked("TRACE", &config));
+        assert!(!is_method_blocked("GET", &config));
+    }
+
+    #[test]
+    fn test_method_blocked_case_insensitive() {
+        let config = TestConfig::new().with_blocked_methods(vec!["TRACE"]);
+
+        assert!(is_method_blocked("TRACE", &config));
+        assert!(is_method_blocked("trace", &config));
+        assert!(is_method_blocked("Trace", &config));
+    }
+
+    // ===========================================
+    // is_hop_by_hop_header tests
+    // ===========================================
+
+    #[test]
+    fn test_hop_by_hop_headers() {
+        assert!(is_hop_by_hop_header("connection"));
+        assert!(is_hop_by_hop_header("keep-alive"));
+        assert!(is_hop_by_hop_header("proxy-authenticate"));
+        assert!(is_hop_by_hop_header("proxy-authorization"));
+        assert!(is_hop_by_hop_header("te"));
+        assert!(is_hop_by_hop_header("trailers"));
+        assert!(is_hop_by_hop_header("transfer-encoding"));
+        assert!(is_hop_by_hop_header("upgrade"));
+    }
+
+    #[test]
+    fn test_not_hop_by_hop_headers() {
+        assert!(!is_hop_by_hop_header("content-type"));
+        assert!(!is_hop_by_hop_header("accept"));
+        assert!(!is_hop_by_hop_header("authorization"));
+        assert!(!is_hop_by_hop_header("x-custom-header"));
+        assert!(!is_hop_by_hop_header("host"));
+    }
+
+    // ===========================================
+    // create_error_response tests
+    // ===========================================
+
+    #[test]
+    fn test_create_error_response_status() {
+        let response = create_error_response(StatusCode::NOT_FOUND, "Not Found");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let response = create_error_response(StatusCode::FORBIDDEN, "Forbidden");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let response = create_error_response(StatusCode::TOO_MANY_REQUESTS, "Rate limited");
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[test]
+    fn test_create_error_response_content_type() {
+        let response = create_error_response(StatusCode::NOT_FOUND, "Not Found");
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "text/plain"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_error_response_body() {
+        let response = create_error_response(StatusCode::NOT_FOUND, "Resource not found");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body, "Resource not found");
+    }
+
+    #[tokio::test]
+    async fn test_create_error_response_empty_message() {
+        let response = create_error_response(StatusCode::NO_CONTENT, "");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body, "");
+    }
+}
