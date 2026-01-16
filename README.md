@@ -117,14 +117,42 @@ wisegate -l 8080 -f 9000 -v
 RUST_LOG=debug wisegate -l 8080 -f 9000
 ```
 
+## 📦 Using as a Library
+
+WiseGate's core functionality is available as a separate crate `wisegate-core` for integration into your own projects:
+
+```toml
+[dependencies]
+wisegate-core = "0.7"
+```
+
+```rust
+use wisegate_core::{ConfigProvider, RateLimiter, request_handler};
+use std::sync::Arc;
+
+// Implement your own configuration
+struct MyConfig { /* ... */ }
+impl ConfigProvider for MyConfig { /* ... */ }
+
+let limiter = RateLimiter::new();
+let config = Arc::new(MyConfig::new());
+let http_client = reqwest::Client::new();
+
+// Use in your request handler
+let response = request_handler::handle_request(
+    req, host, port, limiter, config, http_client
+).await;
+```
+
 ## 🛠️ Development
 
 ```bash
-cargo build              # Debug build
-cargo build --release    # Release build
-cargo test               # Run all tests
-cargo clippy             # Linting
-cargo doc --no-deps      # Generate docs
+cargo build                  # Debug build
+cargo build --release        # Release build
+cargo test                   # Run all tests
+cargo test -p wisegate-core  # Test core library only
+cargo clippy                 # Linting
+cargo doc --no-deps          # Generate docs
 ```
 
 ## 📝 License
