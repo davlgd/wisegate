@@ -1,3 +1,9 @@
+//! WiseGate - A wise guardian for your network gates
+//!
+//! An efficient, secure reverse proxy with built-in rate limiting and IP filtering.
+
+#![forbid(unsafe_code)]
+
 use clap::Parser;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
