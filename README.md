@@ -12,6 +12,7 @@ An efficient, secure reverse proxy written in Rust with built-in rate limiting a
 - **⚔️ HTTP Method Filtering**: Block specific methods (PUT, DELETE, etc.)
 - **🛡️ URL Pattern Blocking**: Block requests matching patterns (.php, .yaml, etc.)
 - **🔑 Basic Authentication**: RFC 7617 HTTP Basic Auth with multiple hash formats
+- **🎫 Bearer Token**: RFC 6750 Bearer Token authentication
 - **🌐 Real IP Extraction**: RFC 7239 compliant header parsing
 - **📝 Structured Logging**: Human-readable or JSON format
 - **🔄 Graceful Shutdown**: Drain connections on SIGINT/SIGTERM
@@ -61,6 +62,7 @@ All configuration via environment variables:
 | `CC_HTTP_BASIC_AUTH` | - | Basic auth credentials (username:password) |
 | `CC_HTTP_BASIC_AUTH_N` | - | Additional credentials (_1, _2, etc.) |
 | `CC_HTTP_BASIC_AUTH_REALM` | `WiseGate` | Authentication realm |
+| `CC_BEARER_TOKEN` | - | Bearer token for API authentication |
 
 ### 📋 Example Configuration
 
@@ -90,9 +92,11 @@ wisegate -l 8080 -f 9000
 - ✅ Method and pattern filtering still active
 - ✅ Rate limiting when IP is available
 
-## 🔑 Basic Authentication
+## 🔐 Authentication
 
-WiseGate supports HTTP Basic Authentication (RFC 7617) with multiple password formats:
+WiseGate supports two authentication methods that can be used independently or together.
+
+### Basic Authentication (RFC 7617)
 
 ```bash
 # Plain text (not recommended for production)
@@ -123,6 +127,30 @@ htpasswd -nbm user password  # APR1 MD5
 htpasswd -nbs user password  # SHA1
 ```
 
+### Bearer Token (RFC 6750)
+
+```bash
+# Set bearer token
+export CC_BEARER_TOKEN="my-secret-api-key"
+
+# Use with curl
+curl -H "Authorization: Bearer my-secret-api-key" http://localhost:8080/api
+```
+
+### Combined Authentication
+
+When both Basic Auth and Bearer Token are configured, either method will be accepted:
+
+```bash
+# Configure both methods
+export CC_HTTP_BASIC_AUTH="admin:secret"
+export CC_BEARER_TOKEN="my-api-key"
+
+# Both of these will work:
+curl -u admin:secret http://localhost:8080/
+curl -H "Authorization: Bearer my-api-key" http://localhost:8080/
+```
+
 ## 🔍 Request Flow
 
 ```
@@ -134,7 +162,7 @@ Client → Load Balancer → 🧙‍♂️ WiseGate → Your Service
                               ├─ 🗺️ Check URL patterns
                               ├─ 👁️ Extract client IP
                               ├─ 🚫 Check IP blocklist
-                              ├─ 🔑 Verify Basic Auth (if enabled)
+                              ├─ 🔑 Verify Authentication (if enabled)
                               ├─ ⏱️ Apply rate limiting
                               └─ 📋 Forward with X-Real-IP
 ```
