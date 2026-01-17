@@ -3,9 +3,10 @@
 //! This module provides shared test configuration types used across unit tests.
 //! It is only compiled when running tests (`#[cfg(test)]`).
 
+use crate::auth::Credentials;
 use crate::types::{
-    ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
-    RateLimitConfig, RateLimitingProvider,
+    AuthenticationProvider, ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider,
+    RateLimitCleanupConfig, RateLimitConfig, RateLimitingProvider,
 };
 use std::time::Duration;
 
@@ -23,6 +24,8 @@ pub struct TestConfig {
     pub blocked_methods: Vec<String>,
     pub blocked_patterns: Vec<String>,
     pub max_connections: usize,
+    pub auth_credentials: Credentials,
+    pub auth_realm: String,
 }
 
 impl Default for TestConfig {
@@ -45,6 +48,8 @@ impl Default for TestConfig {
             blocked_methods: vec![],
             blocked_patterns: vec![],
             max_connections: 10_000,
+            auth_credentials: Credentials::new(),
+            auth_realm: "TestRealm".to_string(),
         }
     }
 }
@@ -100,6 +105,18 @@ impl TestConfig {
         self.blocked_patterns = patterns.into_iter().map(String::from).collect();
         self
     }
+
+    /// Configure authentication credentials.
+    pub fn with_auth_credentials(mut self, credentials: Credentials) -> Self {
+        self.auth_credentials = credentials;
+        self
+    }
+
+    /// Configure authentication realm.
+    pub fn with_auth_realm(mut self, realm: &str) -> Self {
+        self.auth_realm = realm.to_string();
+        self
+    }
 }
 
 impl RateLimitingProvider for TestConfig {
@@ -139,6 +156,16 @@ impl FilteringProvider for TestConfig {
 impl ConnectionProvider for TestConfig {
     fn max_connections(&self) -> usize {
         self.max_connections
+    }
+}
+
+impl AuthenticationProvider for TestConfig {
+    fn auth_credentials(&self) -> &Credentials {
+        &self.auth_credentials
+    }
+
+    fn auth_realm(&self) -> &str {
+        &self.auth_realm
     }
 }
 
