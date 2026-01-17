@@ -34,8 +34,8 @@ use tracing::warn;
 
 use crate::env_vars;
 use wisegate_core::{
-    ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider, RateLimitCleanupConfig,
-    RateLimitConfig, RateLimitingProvider,
+    AuthenticationProvider, ConnectionProvider, Credential, Credentials, FilteringProvider,
+    ProxyConfig, ProxyProvider, RateLimitCleanupConfig, RateLimitConfig, RateLimitingProvider,
 };
 
 // ============================================================================
@@ -52,6 +52,8 @@ static BLOCKED_METHODS: Lazy<Vec<String>> = Lazy::new(compute_blocked_methods);
 static ALLOWED_PROXY_IPS: Lazy<Option<Vec<String>>> =
     Lazy::new(|| compute_allowed_proxy_ips_internal(|key| std::env::var(key)));
 static MAX_CONNECTIONS: Lazy<usize> = Lazy::new(compute_max_connections);
+static AUTH_CREDENTIALS: Lazy<Credentials> = Lazy::new(compute_auth_credentials);
+static AUTH_REALM: Lazy<String> = Lazy::new(compute_auth_realm);
 
 // ============================================================================
 // Default Values
@@ -64,6 +66,7 @@ const DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS: u64 = 60;
 const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
 const DEFAULT_MAX_CONNECTIONS: usize = 10_000;
+const DEFAULT_AUTH_REALM: &str = "WiseGate";
 
 /// Whitelisted environment variable names for proxy IPs.
 ///
@@ -449,6 +452,108 @@ fn compute_blocked_methods() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Returns the cached authentication credentials.
+///
+/// Credentials are loaded from environment variables:
+/// - `CC_HTTP_BASIC_AUTH`: Primary credentials
+/// - `CC_HTTP_BASIC_AUTH_1`, `CC_HTTP_BASIC_AUTH_2`, etc.: Additional credentials
+///
+/// Format: `username:password` or `username:$2y$...` (hashed)
+///
+/// # Returns
+///
+/// A reference to the cached credentials store.
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_auth_credentials;
+///
+/// let creds = get_auth_credentials();
+/// if !creds.is_empty() {
+///     println!("Basic auth enabled with {} user(s)", creds.len());
+/// }
+/// ```
+pub fn get_auth_credentials() -> &'static Credentials {
+    &AUTH_CREDENTIALS
+}
+
+/// Computes authentication credentials from environment variables.
+fn compute_auth_credentials() -> Credentials {
+    let mut entries = Vec::new();
+
+    // Check CC_HTTP_BASIC_AUTH first
+    if let Ok(value) = env::var(env_vars::CC_HTTP_BASIC_AUTH) {
+        if let Some(cred) = Credential::parse(&value) {
+            entries.push(cred);
+        } else {
+            warn!(
+                var = env_vars::CC_HTTP_BASIC_AUTH,
+                "Invalid credential format (expected username:password)"
+            );
+        }
+    }
+
+    // Check CC_HTTP_BASIC_AUTH_1, CC_HTTP_BASIC_AUTH_2, etc.
+    let mut index = 1;
+    loop {
+        let var_name = format!("{}{}", env_vars::CC_HTTP_BASIC_AUTH_N, index);
+        match env::var(&var_name) {
+            Ok(value) => {
+                if let Some(cred) = Credential::parse(&value) {
+                    entries.push(cred);
+                } else {
+                    warn!(var = %var_name, "Invalid credential format (expected username:password)");
+                }
+                index += 1;
+            }
+            Err(_) => break,
+        }
+    }
+
+    Credentials::from_entries(entries)
+}
+
+/// Returns the cached authentication realm.
+///
+/// The realm is displayed in the browser's authentication dialog.
+///
+/// Configuration is read from `CC_HTTP_BASIC_AUTH_REALM` environment variable.
+///
+/// **Default**: `"WiseGate"`
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_auth_realm;
+///
+/// let realm = get_auth_realm();
+/// println!("Auth realm: {}", realm);
+/// ```
+pub fn get_auth_realm() -> &'static str {
+    &AUTH_REALM
+}
+
+/// Computes authentication realm from environment variable.
+fn compute_auth_realm() -> String {
+    env::var(env_vars::CC_HTTP_BASIC_AUTH_REALM).unwrap_or_else(|_| DEFAULT_AUTH_REALM.to_string())
+}
+
+/// Returns true if authentication is enabled (credentials configured).
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::is_auth_enabled;
+///
+/// if is_auth_enabled() {
+///     println!("Basic authentication is enabled");
+/// }
+/// ```
+pub fn is_auth_enabled() -> bool {
+    !AUTH_CREDENTIALS.is_empty()
+}
+
 // ============================================================================
 // EnvVarConfig - ConfigProvider implementation using environment variables
 // ============================================================================
@@ -532,6 +637,16 @@ impl FilteringProvider for EnvVarConfig {
 impl ConnectionProvider for EnvVarConfig {
     fn max_connections(&self) -> usize {
         get_max_connections()
+    }
+}
+
+impl AuthenticationProvider for EnvVarConfig {
+    fn auth_credentials(&self) -> &Credentials {
+        get_auth_credentials()
+    }
+
+    fn auth_realm(&self) -> &str {
+        get_auth_realm()
     }
 }
 
