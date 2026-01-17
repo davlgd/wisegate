@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-01-17
+
+### Added
+- **HTTP Basic Authentication** (RFC 7617): Protect your endpoints with username/password
+  - Support for multiple password formats: plain text, bcrypt, APR1 MD5, SHA1
+  - Constant-time comparison to prevent timing attacks
+  - Multiple users via `CC_HTTP_BASIC_AUTH_N` environment variables
+  - Configurable realm via `CC_HTTP_BASIC_AUTH_REALM`
+- **auth module**: New `wisegate-core/src/auth/` module with:
+  - `Credentials` struct for credential storage
+  - `hash::verify()` for multi-format password verification
+  - `hash::constant_time_eq()` for secure comparison
+  - `check_basic_auth()` for request authentication
+- **AuthenticationProvider trait**: Configuration trait for authentication settings
+- **New environment variables**: `CC_HTTP_BASIC_AUTH`, `CC_HTTP_BASIC_AUTH_N`, `CC_HTTP_BASIC_AUTH_REALM`
+- **New error types**: `AuthenticationRequired`, `InvalidCredentials`
+- **New headers**: `AUTHORIZATION`, `WWW_AUTHENTICATE` constants
+- **41 new tests**: Comprehensive coverage for auth module
+
+### Changed
+- Request pipeline now includes authentication check after method blocking, before rate limiting
+- `ConfigProvider` trait now requires `AuthenticationProvider` implementation
+- Startup info displays authentication status when enabled
+
+---
+
 ## [0.8.0] - 2026-01-17
 
 ### Added

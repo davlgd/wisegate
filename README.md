@@ -11,6 +11,7 @@ An efficient, secure reverse proxy written in Rust with built-in rate limiting a
 - **🚫 IP Filtering**: Block malicious IPs, validate proxy headers
 - **⚔️ HTTP Method Filtering**: Block specific methods (PUT, DELETE, etc.)
 - **🛡️ URL Pattern Blocking**: Block requests matching patterns (.php, .yaml, etc.)
+- **🔑 Basic Authentication**: RFC 7617 HTTP Basic Auth with multiple hash formats
 - **🌐 Real IP Extraction**: RFC 7239 compliant header parsing
 - **📝 Structured Logging**: Human-readable or JSON format
 - **🔄 Graceful Shutdown**: Drain connections on SIGINT/SIGTERM
@@ -57,6 +58,9 @@ All configuration via environment variables:
 | `PROXY_TIMEOUT_SECS` | `30` | Upstream request timeout |
 | `MAX_BODY_SIZE_MB` | `100` | Max body size (0 = unlimited) |
 | `MAX_CONNECTIONS` | `10000` | Max concurrent connections (0 = unlimited) |
+| `CC_HTTP_BASIC_AUTH` | - | Basic auth credentials (username:password) |
+| `CC_HTTP_BASIC_AUTH_N` | - | Additional credentials (_1, _2, etc.) |
+| `CC_HTTP_BASIC_AUTH_REALM` | `WiseGate` | Authentication realm |
 
 ### 📋 Example Configuration
 
@@ -86,6 +90,39 @@ wisegate -l 8080 -f 9000
 - ✅ Method and pattern filtering still active
 - ✅ Rate limiting when IP is available
 
+## 🔑 Basic Authentication
+
+WiseGate supports HTTP Basic Authentication (RFC 7617) with multiple password formats:
+
+```bash
+# Plain text (not recommended for production)
+export CC_HTTP_BASIC_AUTH="admin:secret"
+
+# bcrypt (recommended)
+export CC_HTTP_BASIC_AUTH="admin:\$2y\$05\$..."
+
+# APR1 MD5 (htpasswd -m)
+export CC_HTTP_BASIC_AUTH="admin:\$apr1\$..."
+
+# SHA1 (htpasswd -s)
+export CC_HTTP_BASIC_AUTH="admin:{SHA}..."
+
+# Multiple users
+export CC_HTTP_BASIC_AUTH="admin:admin123"
+export CC_HTTP_BASIC_AUTH_1="user1:pass1"
+export CC_HTTP_BASIC_AUTH_2="user2:pass2"
+
+# Custom realm
+export CC_HTTP_BASIC_AUTH_REALM="My Protected Area"
+```
+
+Generate password hashes with `htpasswd`:
+```bash
+htpasswd -nbB user password  # bcrypt
+htpasswd -nbm user password  # APR1 MD5
+htpasswd -nbs user password  # SHA1
+```
+
 ## 🔍 Request Flow
 
 ```
@@ -97,6 +134,7 @@ Client → Load Balancer → 🧙‍♂️ WiseGate → Your Service
                               ├─ 🗺️ Check URL patterns
                               ├─ 👁️ Extract client IP
                               ├─ 🚫 Check IP blocklist
+                              ├─ 🔑 Verify Basic Auth (if enabled)
                               ├─ ⏱️ Apply rate limiting
                               └─ 📋 Forward with X-Real-IP
 ```
@@ -123,7 +161,7 @@ WiseGate's core functionality is available as a separate crate `wisegate-core` f
 
 ```toml
 [dependencies]
-wisegate-core = "0.8"
+wisegate-core = "0.9"
 ```
 
 ```rust
