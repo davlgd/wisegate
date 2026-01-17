@@ -3,6 +3,8 @@
 //! This module provides shared test configuration types used across unit tests.
 //! It is only compiled when running tests (`#[cfg(test)]`).
 
+use std::time::Duration;
+
 use crate::auth::Credentials;
 use crate::defaults;
 use crate::types::{

@@ -23,6 +23,7 @@ use hyper::{Request, Response, StatusCode, body::Incoming};
 use std::convert::Infallible;
 use std::sync::Arc;
 
+use crate::error::WiseGateError;
 use crate::types::{ConfigProvider, RateLimiter};
 use crate::{auth, headers, ip_filter, rate_limiter};
 
@@ -74,35 +75,30 @@ pub async fn handle_request<C: ConfigProvider>(
                     "unknown".to_string()
                 } else {
                     // If allowlist is configured but validation failed, reject the request
-                    return Ok(create_error_response(
-                        StatusCode::FORBIDDEN,
-                        "Invalid request: missing or invalid proxy headers",
-                    ));
+                    let err = WiseGateError::InvalidIp("missing or invalid proxy headers".into());
+                    return Ok(create_error_response(err.status_code(), err.user_message()));
                 }
             }
         };
 
     // Check if IP is blocked (skip if IP is unknown)
     if real_client_ip != "unknown" && ip_filter::is_ip_blocked(&real_client_ip, config.as_ref()) {
-        return Ok(create_error_response(
-            StatusCode::FORBIDDEN,
-            "IP address is blocked",
-        ));
+        let err = WiseGateError::IpBlocked(real_client_ip);
+        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     // Check for blocked URL patterns
     let request_path = req.uri().path();
     if is_url_pattern_blocked(request_path, config.as_ref()) {
-        return Ok(create_error_response(StatusCode::NOT_FOUND, "Not Found"));
+        let err = WiseGateError::PatternBlocked(request_path.to_string());
+        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     // Check for blocked HTTP methods
     let request_method = req.method().as_str();
     if is_method_blocked(request_method, config.as_ref()) {
-        return Ok(create_error_response(
-            StatusCode::METHOD_NOT_ALLOWED,
-            "HTTP method not allowed",
-        ));
+        let err = WiseGateError::MethodBlocked(request_method.to_string());
+        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     // Check Authentication if enabled (Basic Auth and/or Bearer Token)
@@ -131,10 +127,8 @@ pub async fn handle_request<C: ConfigProvider>(
     if real_client_ip != "unknown"
         && !rate_limiter::check_rate_limit(&limiter, &real_client_ip, config.as_ref()).await
     {
-        return Ok(create_error_response(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Rate limit exceeded",
-        ));
+        let err = WiseGateError::RateLimitExceeded(real_client_ip);
+        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     // Add X-Real-IP header for upstream service (only if we have a real IP)
@@ -173,19 +167,18 @@ async fn forward_request(
             // Check body size limit
             if proxy_config.max_body_size > 0 && collected_bytes.len() > proxy_config.max_body_size
             {
-                return Ok(create_error_response(
-                    StatusCode::PAYLOAD_TOO_LARGE,
-                    "Request body too large",
-                ));
+                let err = WiseGateError::BodyTooLarge {
+                    size: collected_bytes.len(),
+                    max: proxy_config.max_body_size,
+                };
+                return Ok(create_error_response(err.status_code(), err.user_message()));
             }
 
             collected_bytes
         }
-        Err(_) => {
-            return Ok(create_error_response(
-                StatusCode::BAD_REQUEST,
-                "Failed to read request body",
-            ));
+        Err(e) => {
+            let err = WiseGateError::BodyReadError(e.to_string());
+            return Ok(create_error_response(err.status_code(), err.user_message()));
         }
     };
 
@@ -222,10 +215,8 @@ async fn forward_with_reqwest(
             match reqwest::Method::from_bytes(method.as_bytes()) {
                 Ok(custom_method) => client.request(custom_method, &destination_uri),
                 Err(_) => {
-                    return Ok(create_error_response(
-                        StatusCode::METHOD_NOT_ALLOWED,
-                        "HTTP method not supported",
-                    ));
+                    let err = WiseGateError::MethodBlocked(format!("{} (unsupported)", method));
+                    return Ok(create_error_response(err.status_code(), err.user_message()));
                 }
             }
         }
@@ -259,10 +250,14 @@ async fn forward_with_reqwest(
                         .body(Full::new(body_bytes))
                     {
                         Ok(resp) => resp,
-                        Err(_) => {
+                        Err(e) => {
+                            let err = WiseGateError::ProxyError(format!(
+                                "Failed to build response: {}",
+                                e
+                            ));
                             return Ok(create_error_response(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Failed to build response",
+                                err.status_code(),
+                                err.user_message(),
                             ));
                         }
                     };
@@ -283,30 +278,25 @@ async fn forward_with_reqwest(
 
                     Ok(hyper_response)
                 }
-                Err(_) => Ok(create_error_response(
-                    StatusCode::BAD_GATEWAY,
-                    "Failed to read response body",
-                )),
+                Err(e) => {
+                    let err = WiseGateError::BodyReadError(format!("response: {}", e));
+                    Ok(create_error_response(err.status_code(), err.user_message()))
+                }
             }
         }
         Err(err) => {
-            // More specific error handling
-            if err.is_timeout() {
-                Ok(create_error_response(
-                    StatusCode::GATEWAY_TIMEOUT,
-                    "Upstream service timeout",
-                ))
+            // More specific error handling using WiseGateError
+            let wise_err = if err.is_timeout() {
+                WiseGateError::UpstreamTimeout(err.to_string())
             } else if err.is_connect() {
-                Ok(create_error_response(
-                    StatusCode::BAD_GATEWAY,
-                    "Could not connect to upstream service",
-                ))
+                WiseGateError::UpstreamConnectionFailed(err.to_string())
             } else {
-                Ok(create_error_response(
-                    StatusCode::BAD_GATEWAY,
-                    "Upstream service error",
-                ))
-            }
+                WiseGateError::ProxyError(err.to_string())
+            };
+            Ok(create_error_response(
+                wise_err.status_code(),
+                wise_err.user_message(),
+            ))
         }
     }
 }
