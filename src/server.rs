@@ -101,6 +101,19 @@ pub fn print_startup_info(startup_config: &StartupConfig) {
         "Security configured"
     );
 
+    // Display authentication status
+    if config::is_auth_enabled() {
+        let auth_credentials = config::get_auth_credentials();
+        info!(
+            enabled = true,
+            users = auth_credentials.len(),
+            realm = config::get_auth_realm(),
+            "Basic authentication configured"
+        );
+    } else {
+        debug!("Basic authentication disabled (no credentials configured)");
+    }
+
     // Show environment configuration in verbose mode
     if startup_config.verbose {
         print_env_config();
