@@ -36,6 +36,7 @@ use crate::env_vars;
 use wisegate_core::{
     AuthenticationProvider, ConnectionProvider, Credential, Credentials, FilteringProvider,
     ProxyConfig, ProxyProvider, RateLimitCleanupConfig, RateLimitConfig, RateLimitingProvider,
+    defaults,
 };
 
 // ============================================================================
@@ -57,17 +58,17 @@ static AUTH_REALM: Lazy<String> = Lazy::new(compute_auth_realm);
 static BEARER_TOKEN: Lazy<Option<String>> = Lazy::new(compute_bearer_token);
 
 // ============================================================================
-// Default Values
+// Default Values (re-exported from wisegate_core::defaults for convenience)
 // ============================================================================
 
-const DEFAULT_RATE_LIMIT_REQUESTS: u32 = 100;
-const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = 60;
-const DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD: usize = 10_000;
-const DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS: u64 = 60;
-const DEFAULT_PROXY_TIMEOUT_SECS: u64 = 30;
-const DEFAULT_MAX_BODY_SIZE_MB: usize = 100;
-const DEFAULT_MAX_CONNECTIONS: usize = 10_000;
-const DEFAULT_AUTH_REALM: &str = "WiseGate";
+const DEFAULT_RATE_LIMIT_REQUESTS: u32 = defaults::RATE_LIMIT_REQUESTS;
+const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = defaults::RATE_LIMIT_WINDOW_SECS;
+const DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD: usize = defaults::RATE_LIMIT_CLEANUP_THRESHOLD;
+const DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS: u64 = defaults::RATE_LIMIT_CLEANUP_INTERVAL_SECS;
+const DEFAULT_PROXY_TIMEOUT_SECS: u64 = defaults::PROXY_TIMEOUT_SECS;
+const DEFAULT_MAX_BODY_SIZE_MB: usize = defaults::MAX_BODY_SIZE_MB;
+const DEFAULT_MAX_CONNECTIONS: usize = defaults::MAX_CONNECTIONS;
+const DEFAULT_AUTH_REALM: &str = defaults::AUTH_REALM;
 
 /// Whitelisted environment variable names for proxy IPs.
 ///
