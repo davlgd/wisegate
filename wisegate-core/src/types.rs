@@ -59,19 +59,32 @@ pub trait ConnectionProvider: Send + Sync {
     fn max_connections(&self) -> usize;
 }
 
-/// Configuration for HTTP Basic Authentication.
+/// Configuration for HTTP Basic Authentication and Bearer Token.
 ///
 /// Implement this trait to enable optional authentication.
 pub trait AuthenticationProvider: Send + Sync {
-    /// Returns the list of authentication credentials.
+    /// Returns the list of authentication credentials for Basic Auth.
     fn auth_credentials(&self) -> &crate::auth::Credentials;
 
     /// Returns the realm for WWW-Authenticate header.
     fn auth_realm(&self) -> &str;
 
-    /// Returns true if authentication is enabled (credentials configured).
-    fn is_auth_enabled(&self) -> bool {
+    /// Returns the bearer token, if configured.
+    fn bearer_token(&self) -> Option<&str>;
+
+    /// Returns true if Basic Auth is enabled (credentials configured).
+    fn is_basic_auth_enabled(&self) -> bool {
         !self.auth_credentials().is_empty()
+    }
+
+    /// Returns true if Bearer Token auth is enabled.
+    fn is_bearer_auth_enabled(&self) -> bool {
+        self.bearer_token().is_some_and(|t| !t.is_empty())
+    }
+
+    /// Returns true if any authentication is enabled.
+    fn is_auth_enabled(&self) -> bool {
+        self.is_basic_auth_enabled() || self.is_bearer_auth_enabled()
     }
 }
 
@@ -149,6 +162,7 @@ pub trait AuthenticationProvider: Send + Sync {
 /// impl AuthenticationProvider for MyConfig {
 ///     fn auth_credentials(&self) -> &Credentials { &self.credentials }
 ///     fn auth_realm(&self) -> &str { "WiseGate" }
+///     fn bearer_token(&self) -> Option<&str> { None }
 /// }
 /// ```
 pub trait ConfigProvider:
