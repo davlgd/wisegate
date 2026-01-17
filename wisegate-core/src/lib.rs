@@ -89,6 +89,7 @@
 #![forbid(unsafe_code)]
 
 pub mod auth;
+pub mod defaults;
 pub mod error;
 pub mod headers;
 pub mod ip_filter;

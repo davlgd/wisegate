@@ -4,11 +4,11 @@
 //! It is only compiled when running tests (`#[cfg(test)]`).
 
 use crate::auth::Credentials;
+use crate::defaults;
 use crate::types::{
     AuthenticationProvider, ConnectionProvider, FilteringProvider, ProxyConfig, ProxyProvider,
     RateLimitCleanupConfig, RateLimitConfig, RateLimitingProvider,
 };
-use std::time::Duration;
 
 /// Shared test configuration for unit tests.
 ///
@@ -33,24 +33,24 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             rate_limit: RateLimitConfig {
-                max_requests: 100,
-                window_duration: Duration::from_secs(60),
+                max_requests: defaults::RATE_LIMIT_REQUESTS,
+                window_duration: defaults::RATE_LIMIT_WINDOW,
             },
             cleanup: RateLimitCleanupConfig {
-                threshold: 10_000,
-                interval: Duration::from_secs(60),
+                threshold: defaults::RATE_LIMIT_CLEANUP_THRESHOLD,
+                interval: defaults::RATE_LIMIT_CLEANUP_INTERVAL,
             },
             proxy: ProxyConfig {
-                timeout: Duration::from_secs(30),
-                max_body_size: 100 * 1024 * 1024,
+                timeout: defaults::PROXY_TIMEOUT,
+                max_body_size: defaults::MAX_BODY_SIZE,
             },
             allowed_proxy_ips: None,
             blocked_ips: vec![],
             blocked_methods: vec![],
             blocked_patterns: vec![],
-            max_connections: 10_000,
+            max_connections: defaults::MAX_CONNECTIONS,
             auth_credentials: Credentials::new(),
-            auth_realm: "TestRealm".to_string(),
+            auth_realm: defaults::AUTH_REALM.to_string(),
             bearer_token: None,
         }
     }
