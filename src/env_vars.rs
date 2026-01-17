@@ -128,6 +128,14 @@ pub const CC_HTTP_BASIC_AUTH_N: &str = "CC_HTTP_BASIC_AUTH_";
 /// **Example**: `"My Protected Area"`
 pub const CC_HTTP_BASIC_AUTH_REALM: &str = "CC_HTTP_BASIC_AUTH_REALM";
 
+/// Bearer token for API authentication (RFC 6750).
+///
+/// When set, requests must include `Authorization: Bearer <token>` header.
+/// If both Basic Auth and Bearer Token are configured, either method is accepted.
+///
+/// **Example**: `"my-secret-api-key"`
+pub const CC_BEARER_TOKEN: &str = "CC_BEARER_TOKEN";
+
 // ============================================================================
 // Proxy Behavior Configuration
 // ============================================================================
@@ -189,6 +197,7 @@ pub fn all_env_vars() -> &'static [&'static str] {
         RATE_LIMIT_CLEANUP_INTERVAL_SECS,
         CC_HTTP_BASIC_AUTH,
         CC_HTTP_BASIC_AUTH_REALM,
+        CC_BEARER_TOKEN,
         PROXY_TIMEOUT_SECS,
         MAX_BODY_SIZE_MB,
         MAX_CONNECTIONS,
