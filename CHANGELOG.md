@@ -12,21 +12,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Constant-time comparison to prevent timing attacks
   - Multiple users via `CC_HTTP_BASIC_AUTH_N` environment variables
   - Configurable realm via `CC_HTTP_BASIC_AUTH_REALM`
+- **Bearer Token Authentication** (RFC 6750): API key authentication
+  - Simple token-based authentication via `CC_BEARER_TOKEN`
+  - Constant-time comparison to prevent timing attacks
+  - Can be used alone or combined with Basic Auth (either method accepted)
 - **auth module**: New `wisegate-core/src/auth/` module with:
   - `Credentials` struct for credential storage
   - `hash::verify()` for multi-format password verification
   - `hash::constant_time_eq()` for secure comparison
   - `check_basic_auth()` for request authentication
+  - `check_bearer_token()` for bearer token verification
 - **AuthenticationProvider trait**: Configuration trait for authentication settings
-- **New environment variables**: `CC_HTTP_BASIC_AUTH`, `CC_HTTP_BASIC_AUTH_N`, `CC_HTTP_BASIC_AUTH_REALM`
+  - `bearer_token()` method for bearer token access
+  - `is_basic_auth_enabled()` and `is_bearer_auth_enabled()` helpers
+- **New environment variables**: `CC_HTTP_BASIC_AUTH`, `CC_HTTP_BASIC_AUTH_N`, `CC_HTTP_BASIC_AUTH_REALM`, `CC_BEARER_TOKEN`
 - **New error types**: `AuthenticationRequired`, `InvalidCredentials`
 - **New headers**: `AUTHORIZATION`, `WWW_AUTHENTICATE` constants
-- **41 new tests**: Comprehensive coverage for auth module
+- **51 new tests**: Comprehensive coverage for auth module
 
 ### Changed
 - Request pipeline now includes authentication check after method blocking, before rate limiting
 - `ConfigProvider` trait now requires `AuthenticationProvider` implementation
-- Startup info displays authentication status when enabled
+- Startup info displays authentication status (Basic Auth and Bearer Token)
 
 ---
 
