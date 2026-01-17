@@ -26,6 +26,7 @@ pub struct TestConfig {
     pub max_connections: usize,
     pub auth_credentials: Credentials,
     pub auth_realm: String,
+    pub bearer_token: Option<String>,
 }
 
 impl Default for TestConfig {
@@ -50,6 +51,7 @@ impl Default for TestConfig {
             max_connections: 10_000,
             auth_credentials: Credentials::new(),
             auth_realm: "TestRealm".to_string(),
+            bearer_token: None,
         }
     }
 }
@@ -117,6 +119,12 @@ impl TestConfig {
         self.auth_realm = realm.to_string();
         self
     }
+
+    /// Configure bearer token.
+    pub fn with_bearer_token(mut self, token: &str) -> Self {
+        self.bearer_token = Some(token.to_string());
+        self
+    }
 }
 
 impl RateLimitingProvider for TestConfig {
@@ -166,6 +174,10 @@ impl AuthenticationProvider for TestConfig {
 
     fn auth_realm(&self) -> &str {
         &self.auth_realm
+    }
+
+    fn bearer_token(&self) -> Option<&str> {
+        self.bearer_token.as_deref()
     }
 }
 
