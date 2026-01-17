@@ -907,11 +907,13 @@ fn test_bearer_token_valid() {
     env.setup().expect("Failed to setup auth test environment");
 
     // Request with valid Bearer Token
-    let (status, body) =
-        make_auth_request(&env, "GET", "/", Some("Bearer my-secret-api-key"))
-            .expect("Failed to make request with Bearer Token");
+    let (status, body) = make_auth_request(&env, "GET", "/", Some("Bearer my-secret-api-key"))
+        .expect("Failed to make request with Bearer Token");
 
-    assert_eq!(status, 200, "Request with valid Bearer Token should succeed");
+    assert_eq!(
+        status, 200,
+        "Request with valid Bearer Token should succeed"
+    );
     assert!(
         body.contains("Authenticated"),
         "Response should indicate success"
@@ -925,9 +927,8 @@ fn test_bearer_token_invalid() {
     env.setup().expect("Failed to setup auth test environment");
 
     // Request with invalid Bearer Token
-    let (status, _) =
-        make_auth_request(&env, "GET", "/", Some("Bearer wrong-token"))
-            .expect("Failed to make request with invalid Bearer Token");
+    let (status, _) = make_auth_request(&env, "GET", "/", Some("Bearer wrong-token"))
+        .expect("Failed to make request with invalid Bearer Token");
 
     assert_eq!(
         status, 401,
@@ -963,9 +964,8 @@ fn test_combined_auth_bearer_works() {
     env.setup().expect("Failed to setup auth test environment");
 
     // Request with Bearer Token should work when both are configured
-    let (status, body) =
-        make_auth_request(&env, "GET", "/", Some("Bearer my-api-key"))
-            .expect("Failed to make request with Bearer Token");
+    let (status, body) = make_auth_request(&env, "GET", "/", Some("Bearer my-api-key"))
+        .expect("Failed to make request with Bearer Token");
 
     assert_eq!(
         status, 200,
