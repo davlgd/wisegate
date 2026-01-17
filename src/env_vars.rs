@@ -100,6 +100,35 @@ pub const RATE_LIMIT_CLEANUP_THRESHOLD: &str = "RATE_LIMIT_CLEANUP_THRESHOLD";
 pub const RATE_LIMIT_CLEANUP_INTERVAL_SECS: &str = "RATE_LIMIT_CLEANUP_INTERVAL_SECS";
 
 // ============================================================================
+// Authentication Configuration
+// ============================================================================
+
+/// HTTP Basic Authentication credentials.
+///
+/// Format: `"username:password"` or `"username:$2y$...hash..."`
+/// Supports plain text, bcrypt, APR1 MD5, and SHA1 password formats.
+///
+/// **Example**: `"admin:secretpassword"` or `"admin:$2y$05$..."`
+pub const CC_HTTP_BASIC_AUTH: &str = "CC_HTTP_BASIC_AUTH";
+
+/// Additional HTTP Basic Authentication credentials (numbered).
+///
+/// Use with suffix _1, _2, etc. for multiple users.
+/// Variables are read sequentially until one is not found.
+///
+/// **Example**: Set `CC_HTTP_BASIC_AUTH_1="user1:pass1"`, `CC_HTTP_BASIC_AUTH_2="user2:pass2"`
+pub const CC_HTTP_BASIC_AUTH_N: &str = "CC_HTTP_BASIC_AUTH_";
+
+/// Custom realm for HTTP Basic Authentication.
+///
+/// Displayed in the browser's authentication dialog.
+///
+/// **Default**: `"WiseGate"`
+///
+/// **Example**: `"My Protected Area"`
+pub const CC_HTTP_BASIC_AUTH_REALM: &str = "CC_HTTP_BASIC_AUTH_REALM";
+
+// ============================================================================
 // Proxy Behavior Configuration
 // ============================================================================
 
@@ -158,6 +187,8 @@ pub fn all_env_vars() -> &'static [&'static str] {
         RATE_LIMIT_WINDOW_SECS,
         RATE_LIMIT_CLEANUP_THRESHOLD,
         RATE_LIMIT_CLEANUP_INTERVAL_SECS,
+        CC_HTTP_BASIC_AUTH,
+        CC_HTTP_BASIC_AUTH_REALM,
         PROXY_TIMEOUT_SECS,
         MAX_BODY_SIZE_MB,
         MAX_CONNECTIONS,
