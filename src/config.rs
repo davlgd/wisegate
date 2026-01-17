@@ -54,6 +54,7 @@ static ALLOWED_PROXY_IPS: Lazy<Option<Vec<String>>> =
 static MAX_CONNECTIONS: Lazy<usize> = Lazy::new(compute_max_connections);
 static AUTH_CREDENTIALS: Lazy<Credentials> = Lazy::new(compute_auth_credentials);
 static AUTH_REALM: Lazy<String> = Lazy::new(compute_auth_realm);
+static BEARER_TOKEN: Lazy<Option<String>> = Lazy::new(compute_bearer_token);
 
 // ============================================================================
 // Default Values
@@ -551,7 +552,40 @@ fn compute_auth_realm() -> String {
 /// }
 /// ```
 pub fn is_auth_enabled() -> bool {
-    !AUTH_CREDENTIALS.is_empty()
+    !AUTH_CREDENTIALS.is_empty() || get_bearer_token().is_some()
+}
+
+/// Returns the cached bearer token for API authentication.
+///
+/// The bearer token enables RFC 6750 Bearer Token authentication.
+/// Requests can authenticate by providing the token in the Authorization header:
+/// `Authorization: Bearer <token>`
+///
+/// Configuration is read from `CC_BEARER_TOKEN` environment variable.
+///
+/// # Returns
+///
+/// - `Some(&str)`: The configured bearer token
+/// - `None`: Bearer token authentication is disabled
+///
+/// # Example
+///
+/// ```
+/// use wisegate::config::get_bearer_token;
+///
+/// if let Some(token) = get_bearer_token() {
+///     println!("Bearer token authentication enabled");
+/// }
+/// ```
+pub fn get_bearer_token() -> Option<&'static str> {
+    BEARER_TOKEN.as_deref()
+}
+
+/// Computes bearer token from environment variable.
+fn compute_bearer_token() -> Option<String> {
+    env::var(env_vars::CC_BEARER_TOKEN)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
 }
 
 // ============================================================================
@@ -647,6 +681,10 @@ impl AuthenticationProvider for EnvVarConfig {
 
     fn auth_realm(&self) -> &str {
         get_auth_realm()
+    }
+
+    fn bearer_token(&self) -> Option<&str> {
+        get_bearer_token()
     }
 }
 
