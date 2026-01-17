@@ -828,6 +828,7 @@ fn make_auth_request(
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_basic_auth_required() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_basic_auth("admin", "secret123");
@@ -844,6 +845,7 @@ fn test_basic_auth_required() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_basic_auth_valid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_basic_auth("admin", "secret123");
@@ -865,6 +867,7 @@ fn test_basic_auth_valid() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_basic_auth_invalid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_basic_auth("admin", "secret123");
@@ -885,6 +888,7 @@ fn test_basic_auth_invalid() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_bearer_token_required() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_bearer_token("my-secret-api-key");
@@ -901,6 +905,7 @@ fn test_bearer_token_required() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_bearer_token_valid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_bearer_token("my-secret-api-key");
@@ -921,6 +926,7 @@ fn test_bearer_token_valid() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_bearer_token_invalid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_bearer_token("my-secret-api-key");
@@ -937,6 +943,7 @@ fn test_bearer_token_invalid() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_combined_auth_basic_works() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_combined("admin", "secret123", "my-api-key");
@@ -958,6 +965,7 @@ fn test_combined_auth_basic_works() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_combined_auth_bearer_works() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_combined("admin", "secret123", "my-api-key");
@@ -975,6 +983,7 @@ fn test_combined_auth_bearer_works() {
 }
 
 #[test]
+#[ignore] // Requires release build and Python3
 fn test_combined_auth_none_fails() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     let mut env = AuthTestEnvironment::new_combined("admin", "secret123", "my-api-key");
