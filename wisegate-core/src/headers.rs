@@ -12,6 +12,12 @@ pub const X_REAL_IP: &str = "x-real-ip";
 /// Forwarded header (RFC 7239) - standardized proxy header.
 pub const FORWARDED: &str = "forwarded";
 
+/// Authorization header (for Basic Auth).
+pub const AUTHORIZATION: &str = "authorization";
+
+/// WWW-Authenticate header (for 401 responses).
+pub const WWW_AUTHENTICATE: &str = "www-authenticate";
+
 /// Content-Type header.
 pub const CONTENT_TYPE: &str = "content-type";
 
