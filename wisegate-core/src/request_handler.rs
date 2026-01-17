@@ -24,7 +24,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 
 use crate::types::{ConfigProvider, RateLimiter};
-use crate::{headers, ip_filter, rate_limiter};
+use crate::{auth, headers, ip_filter, rate_limiter};
 
 /// Handles an incoming HTTP request through the proxy pipeline.
 ///
@@ -103,6 +103,18 @@ pub async fn handle_request<C: ConfigProvider>(
             StatusCode::METHOD_NOT_ALLOWED,
             "HTTP method not allowed",
         ));
+    }
+
+    // Check Basic Authentication if enabled
+    if config.is_auth_enabled() {
+        let auth_header = req
+            .headers()
+            .get(headers::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok());
+
+        if !auth::check_basic_auth(auth_header, config.auth_credentials()) {
+            return Ok(create_unauthorized_response(config.auth_realm()));
+        }
     }
 
     // Apply rate limiting (skip if IP is unknown)
@@ -322,6 +334,30 @@ pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full
             // Fallback response if builder fails (extremely unlikely)
             Response::new(Full::new(bytes::Bytes::from("Internal Server Error")))
         })
+}
+
+/// Creates a 401 Unauthorized response with WWW-Authenticate header.
+///
+/// Used when Basic Authentication is enabled and the request is not authenticated
+/// or has invalid credentials.
+///
+/// # Arguments
+///
+/// * `realm` - The authentication realm to display in the browser dialog
+///
+/// # Returns
+///
+/// An HTTP 401 response with `WWW-Authenticate: Basic realm="..."` header.
+pub fn create_unauthorized_response(realm: &str) -> Response<Full<bytes::Bytes>> {
+    Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .header(
+            headers::WWW_AUTHENTICATE,
+            format!("Basic realm=\"{}\"", realm),
+        )
+        .header("content-type", "text/plain")
+        .body(Full::new(bytes::Bytes::from("401 Unauthorized")))
+        .unwrap_or_else(|_| Response::new(Full::new(bytes::Bytes::from("401 Unauthorized"))))
 }
 
 /// Check if URL path contains any blocked patterns
