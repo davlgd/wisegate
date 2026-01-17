@@ -102,16 +102,20 @@ pub fn print_startup_info(startup_config: &StartupConfig) {
     );
 
     // Display authentication status
-    if config::is_auth_enabled() {
-        let auth_credentials = config::get_auth_credentials();
+    let auth_credentials = config::get_auth_credentials();
+    let basic_auth_enabled = !auth_credentials.is_empty();
+    let bearer_auth_enabled = config::get_bearer_token().is_some();
+
+    if basic_auth_enabled || bearer_auth_enabled {
         info!(
-            enabled = true,
-            users = auth_credentials.len(),
+            basic_auth = basic_auth_enabled,
+            basic_auth_users = auth_credentials.len(),
+            bearer_token = bearer_auth_enabled,
             realm = config::get_auth_realm(),
-            "Basic authentication configured"
+            "Authentication configured"
         );
     } else {
-        debug!("Basic authentication disabled (no credentials configured)");
+        debug!("Authentication disabled (no credentials or bearer token configured)");
     }
 
     // Show environment configuration in verbose mode
