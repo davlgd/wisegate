@@ -70,6 +70,7 @@
 //! impl AuthenticationProvider for MyConfig {
 //!     fn auth_credentials(&self) -> &Credentials { &self.credentials }
 //!     fn auth_realm(&self) -> &str { "WiseGate" }
+//!     fn bearer_token(&self) -> Option<&str> { None }
 //! }
 //!
 //! // Create a rate limiter
@@ -98,7 +99,7 @@ pub mod test_utils;
 pub mod types;
 
 // Re-export commonly used items at crate root
-pub use auth::{Credential, Credentials, check_basic_auth};
+pub use auth::{Credential, Credentials, check_basic_auth, check_bearer_token};
 pub use error::{Result, WiseGateError};
 pub use types::{
     // Composable configuration traits
