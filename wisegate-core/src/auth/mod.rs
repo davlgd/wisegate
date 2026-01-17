@@ -1,7 +1,7 @@
-//! Authentication module for HTTP Basic Authentication (RFC 7617).
+//! Authentication module for HTTP Basic Authentication (RFC 7617) and Bearer Token (RFC 6750).
 //!
 //! Provides credential storage, verification, and HTTP header parsing for
-//! implementing Basic Authentication in WiseGate.
+//! implementing Basic Authentication and Bearer Token authentication in WiseGate.
 
 pub mod hash;
 
@@ -126,7 +126,7 @@ impl Default for Credentials {
     }
 }
 
-/// Checks if the request has valid authentication.
+/// Checks if the request has valid Basic authentication.
 ///
 /// Returns `true` if authentication is successful or not required.
 /// Returns `false` if authentication is required but failed.
@@ -145,6 +145,38 @@ pub fn check_basic_auth(auth_header: Option<&str>, credentials: &Credentials) ->
         Some(header) => credentials.verify(header),
         None => false,
     }
+}
+
+/// Checks if the request has a valid Bearer token.
+///
+/// Returns `true` if authentication is successful or not required.
+/// Returns `false` if authentication is required but failed.
+///
+/// # Arguments
+///
+/// * `auth_header` - The value of the Authorization header, if present.
+/// * `expected_token` - The expected bearer token, if configured.
+pub fn check_bearer_token(auth_header: Option<&str>, expected_token: Option<&str>) -> bool {
+    let Some(expected) = expected_token else {
+        // No token configured, authentication not required
+        return true;
+    };
+
+    if expected.is_empty() {
+        // Empty token means disabled
+        return true;
+    }
+
+    let Some(header) = auth_header else {
+        return false;
+    };
+
+    let Some(token) = header.strip_prefix("Bearer ") else {
+        return false;
+    };
+
+    // Use constant-time comparison to prevent timing attacks
+    hash::constant_time_eq(token.trim().as_bytes(), expected.as_bytes())
 }
 
 #[cfg(test)]
@@ -326,5 +358,71 @@ mod tests {
         // Invalid header = fail
         let invalid_header = format!("Basic {}", STANDARD.encode("admin:wrong"));
         assert!(!check_basic_auth(Some(&invalid_header), &creds));
+    }
+
+    // ===========================================
+    // Bearer token tests
+    // ===========================================
+
+    #[test]
+    fn test_check_bearer_token_no_token_configured() {
+        // No token configured = always pass
+        assert!(check_bearer_token(None, None));
+        assert!(check_bearer_token(Some("Bearer anything"), None));
+    }
+
+    #[test]
+    fn test_check_bearer_token_empty_token() {
+        // Empty token = disabled
+        assert!(check_bearer_token(None, Some("")));
+        assert!(check_bearer_token(Some("Bearer anything"), Some("")));
+    }
+
+    #[test]
+    fn test_check_bearer_token_valid() {
+        let token = "my-secret-token";
+        let header = "Bearer my-secret-token";
+        assert!(check_bearer_token(Some(header), Some(token)));
+    }
+
+    #[test]
+    fn test_check_bearer_token_valid_with_whitespace() {
+        let token = "my-secret-token";
+        let header = "Bearer my-secret-token ";
+        assert!(check_bearer_token(Some(header), Some(token)));
+    }
+
+    #[test]
+    fn test_check_bearer_token_invalid() {
+        let token = "my-secret-token";
+        let header = "Bearer wrong-token";
+        assert!(!check_bearer_token(Some(header), Some(token)));
+    }
+
+    #[test]
+    fn test_check_bearer_token_no_header() {
+        let token = "my-secret-token";
+        assert!(!check_bearer_token(None, Some(token)));
+    }
+
+    #[test]
+    fn test_check_bearer_token_basic_auth_header() {
+        // Basic auth header should not work for bearer
+        let token = "my-secret-token";
+        let header = format!("Basic {}", STANDARD.encode("user:pass"));
+        assert!(!check_bearer_token(Some(&header), Some(token)));
+    }
+
+    #[test]
+    fn test_check_bearer_token_case_sensitive() {
+        let token = "MySecretToken";
+        assert!(check_bearer_token(
+            Some("Bearer MySecretToken"),
+            Some(token)
+        ));
+        assert!(!check_bearer_token(
+            Some("Bearer mysecrettoken"),
+            Some(token)
+        ));
     }
 }
