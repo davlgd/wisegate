@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-01-17
+
+### Added
+- **Authentication integration tests**: 9 new tests covering Basic Auth, Bearer Token, and combined authentication scenarios
+- **defaults module**: Centralized default configuration values in `wisegate-core/src/defaults.rs` (DRY principle)
+
+### Changed
+- **request_handler**: Now uses `WiseGateError` for consistent error handling throughout the pipeline
+- **test_utils**: Uses centralized defaults module for configuration values
+
+---
+
 ## [0.9.0] - 2026-01-17
 
 ### Added

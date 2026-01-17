@@ -1,6 +1,6 @@
 [package]
 name = "wisegate-core"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 description = "Core library for WiseGate reverse proxy - rate limiting, IP filtering, and request handling"
 license = "Apache-2.0"

@@ -3,7 +3,7 @@ members = ["wisegate-core"]
 
 [package]
 name = "wisegate"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 description = "A high-performance, secure reverse proxy with rate limiting and IP filtering"
 license = "Apache-2.0"
@@ -19,7 +19,7 @@ exclude = [
 ]
 
 [dependencies]
-wisegate-core = { version = "0.9.0", path = "wisegate-core" }
+wisegate-core = { version = "0.10.0", path = "wisegate-core" }
 clap = { version = "4.5.54", features = ["derive"] }
 hyper = { version = "1.8.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.19", features = ["tokio"] }
