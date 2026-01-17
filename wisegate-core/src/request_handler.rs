@@ -105,14 +105,24 @@ pub async fn handle_request<C: ConfigProvider>(
         ));
     }
 
-    // Check Basic Authentication if enabled
+    // Check Authentication if enabled (Basic Auth and/or Bearer Token)
+    // Logic: if both are configured, either one passing is sufficient
     if config.is_auth_enabled() {
         let auth_header = req
             .headers()
             .get(headers::AUTHORIZATION)
             .and_then(|v| v.to_str().ok());
 
-        if !auth::check_basic_auth(auth_header, config.auth_credentials()) {
+        let basic_auth_enabled = config.is_basic_auth_enabled();
+        let bearer_auth_enabled = config.is_bearer_auth_enabled();
+
+        let basic_auth_passed =
+            basic_auth_enabled && auth::check_basic_auth(auth_header, config.auth_credentials());
+        let bearer_auth_passed =
+            bearer_auth_enabled && auth::check_bearer_token(auth_header, config.bearer_token());
+
+        // Authentication fails if neither method passed
+        if !basic_auth_passed && !bearer_auth_passed {
             return Ok(create_unauthorized_response(config.auth_realm()));
         }
     }
