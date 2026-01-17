@@ -59,6 +59,22 @@ pub trait ConnectionProvider: Send + Sync {
     fn max_connections(&self) -> usize;
 }
 
+/// Configuration for HTTP Basic Authentication.
+///
+/// Implement this trait to enable optional authentication.
+pub trait AuthenticationProvider: Send + Sync {
+    /// Returns the list of authentication credentials.
+    fn auth_credentials(&self) -> &crate::auth::Credentials;
+
+    /// Returns the realm for WWW-Authenticate header.
+    fn auth_realm(&self) -> &str;
+
+    /// Returns true if authentication is enabled (credentials configured).
+    fn is_auth_enabled(&self) -> bool {
+        !self.auth_credentials().is_empty()
+    }
+}
+
 // ============================================================================
 // ConfigProvider - Aggregated trait for full configuration
 // ============================================================================
@@ -74,17 +90,21 @@ pub trait ConnectionProvider: Send + Sync {
 /// - [`ProxyProvider`] for proxy behavior
 /// - [`FilteringProvider`] for request filtering
 /// - [`ConnectionProvider`] for connection limits
+/// - [`AuthenticationProvider`] for HTTP Basic Authentication
 ///
 /// # Example
 ///
 /// ```
 /// use wisegate_core::{
 ///     RateLimitingProvider, ProxyProvider, FilteringProvider, ConnectionProvider,
+///     AuthenticationProvider, Credentials,
 ///     RateLimitConfig, RateLimitCleanupConfig, ProxyConfig,
 /// };
 /// use std::time::Duration;
 ///
-/// struct MyConfig;
+/// struct MyConfig {
+///     credentials: Credentials,
+/// }
 ///
 /// impl RateLimitingProvider for MyConfig {
 ///     fn rate_limit_config(&self) -> &RateLimitConfig {
@@ -125,15 +145,28 @@ pub trait ConnectionProvider: Send + Sync {
 /// impl ConnectionProvider for MyConfig {
 ///     fn max_connections(&self) -> usize { 10_000 }
 /// }
+///
+/// impl AuthenticationProvider for MyConfig {
+///     fn auth_credentials(&self) -> &Credentials { &self.credentials }
+///     fn auth_realm(&self) -> &str { "WiseGate" }
+/// }
 /// ```
 pub trait ConfigProvider:
-    RateLimitingProvider + ProxyProvider + FilteringProvider + ConnectionProvider
+    RateLimitingProvider
+    + ProxyProvider
+    + FilteringProvider
+    + ConnectionProvider
+    + AuthenticationProvider
 {
 }
 
 // Blanket implementation: any type implementing all sub-traits is a ConfigProvider
 impl<T> ConfigProvider for T where
-    T: RateLimitingProvider + ProxyProvider + FilteringProvider + ConnectionProvider
+    T: RateLimitingProvider
+        + ProxyProvider
+        + FilteringProvider
+        + ConnectionProvider
+        + AuthenticationProvider
 {
 }
 
