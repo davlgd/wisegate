@@ -17,12 +17,15 @@
 //! ```rust,no_run
 //! use wisegate_core::{
 //!     RateLimitingProvider, ProxyProvider, FilteringProvider, ConnectionProvider,
+//!     AuthenticationProvider, Credentials,
 //!     RateLimiter, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig,
 //! };
 //! use std::time::Duration;
 //!
 //! // Implement your own configuration provider using composable traits
-//! struct MyConfig;
+//! struct MyConfig {
+//!     credentials: Credentials,
+//! }
 //!
 //! impl RateLimitingProvider for MyConfig {
 //!     fn rate_limit_config(&self) -> &RateLimitConfig {
@@ -64,6 +67,11 @@
 //!     fn max_connections(&self) -> usize { 10_000 }
 //! }
 //!
+//! impl AuthenticationProvider for MyConfig {
+//!     fn auth_credentials(&self) -> &Credentials { &self.credentials }
+//!     fn auth_realm(&self) -> &str { "WiseGate" }
+//! }
+//!
 //! // Create a rate limiter
 //! let limiter = RateLimiter::new();
 //! ```
@@ -79,6 +87,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod auth;
 pub mod error;
 pub mod headers;
 pub mod ip_filter;
@@ -89,11 +98,13 @@ pub mod test_utils;
 pub mod types;
 
 // Re-export commonly used items at crate root
+pub use auth::{Credential, Credentials, check_basic_auth};
 pub use error::{Result, WiseGateError};
 pub use types::{
+    // Composable configuration traits
+    AuthenticationProvider,
     // Aggregated configuration trait
     ConfigProvider,
-    // Composable configuration traits
     ConnectionProvider,
     FilteringProvider,
     // Configuration structs
