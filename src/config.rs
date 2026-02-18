@@ -2,7 +2,7 @@
 //!
 //! This module handles loading and caching configuration from environment variables.
 //! All configurations are computed once at first access and cached for the lifetime
-//! of the application using `once_cell::sync::Lazy`.
+//! of the application using `std::sync::LazyLock`.
 //!
 //! # Caching
 //!
@@ -29,7 +29,7 @@ use std::env;
 use std::str::FromStr;
 use std::time::Duration;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tracing::warn;
 
 use crate::env_vars;
@@ -43,19 +43,19 @@ use wisegate_core::{
 // Cached Configuration (computed once at first access)
 // ============================================================================
 
-static RATE_LIMIT_CONFIG: Lazy<RateLimitConfig> = Lazy::new(compute_rate_limit_config);
-static RATE_LIMIT_CLEANUP_CONFIG: Lazy<RateLimitCleanupConfig> =
-    Lazy::new(compute_rate_limit_cleanup_config);
-static PROXY_CONFIG: Lazy<ProxyConfig> = Lazy::new(compute_proxy_config);
-static BLOCKED_IPS: Lazy<Vec<String>> = Lazy::new(compute_blocked_ips);
-static BLOCKED_PATTERNS: Lazy<Vec<String>> = Lazy::new(compute_blocked_patterns);
-static BLOCKED_METHODS: Lazy<Vec<String>> = Lazy::new(compute_blocked_methods);
-static ALLOWED_PROXY_IPS: Lazy<Option<Vec<String>>> =
-    Lazy::new(|| compute_allowed_proxy_ips_internal(|key| std::env::var(key)));
-static MAX_CONNECTIONS: Lazy<usize> = Lazy::new(compute_max_connections);
-static AUTH_CREDENTIALS: Lazy<Credentials> = Lazy::new(compute_auth_credentials);
-static AUTH_REALM: Lazy<String> = Lazy::new(compute_auth_realm);
-static BEARER_TOKEN: Lazy<Option<String>> = Lazy::new(compute_bearer_token);
+static RATE_LIMIT_CONFIG: LazyLock<RateLimitConfig> = LazyLock::new(compute_rate_limit_config);
+static RATE_LIMIT_CLEANUP_CONFIG: LazyLock<RateLimitCleanupConfig> =
+    LazyLock::new(compute_rate_limit_cleanup_config);
+static PROXY_CONFIG: LazyLock<ProxyConfig> = LazyLock::new(compute_proxy_config);
+static BLOCKED_IPS: LazyLock<Vec<String>> = LazyLock::new(compute_blocked_ips);
+static BLOCKED_PATTERNS: LazyLock<Vec<String>> = LazyLock::new(compute_blocked_patterns);
+static BLOCKED_METHODS: LazyLock<Vec<String>> = LazyLock::new(compute_blocked_methods);
+static ALLOWED_PROXY_IPS: LazyLock<Option<Vec<String>>> =
+    LazyLock::new(|| compute_allowed_proxy_ips_internal(|key| std::env::var(key)));
+static MAX_CONNECTIONS: LazyLock<usize> = LazyLock::new(compute_max_connections);
+static AUTH_CREDENTIALS: LazyLock<Credentials> = LazyLock::new(compute_auth_credentials);
+static AUTH_REALM: LazyLock<String> = LazyLock::new(compute_auth_realm);
+static BEARER_TOKEN: LazyLock<Option<String>> = LazyLock::new(compute_bearer_token);
 
 /// Whitelisted environment variable names for proxy IPs.
 ///

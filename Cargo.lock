@@ -1365,7 +1365,6 @@ dependencies = [
  "clap",
  "hyper",
  "hyper-util",
- "once_cell",
  "reqwest",
  "tokio",
  "tracing",
