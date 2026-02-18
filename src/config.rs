@@ -57,19 +57,6 @@ static AUTH_CREDENTIALS: Lazy<Credentials> = Lazy::new(compute_auth_credentials)
 static AUTH_REALM: Lazy<String> = Lazy::new(compute_auth_realm);
 static BEARER_TOKEN: Lazy<Option<String>> = Lazy::new(compute_bearer_token);
 
-// ============================================================================
-// Default Values (re-exported from wisegate_core::defaults for convenience)
-// ============================================================================
-
-const DEFAULT_RATE_LIMIT_REQUESTS: u32 = defaults::RATE_LIMIT_REQUESTS;
-const DEFAULT_RATE_LIMIT_WINDOW_SECS: u64 = defaults::RATE_LIMIT_WINDOW_SECS;
-const DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD: usize = defaults::RATE_LIMIT_CLEANUP_THRESHOLD;
-const DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS: u64 = defaults::RATE_LIMIT_CLEANUP_INTERVAL_SECS;
-const DEFAULT_PROXY_TIMEOUT_SECS: u64 = defaults::PROXY_TIMEOUT_SECS;
-const DEFAULT_MAX_BODY_SIZE_MB: usize = defaults::MAX_BODY_SIZE_MB;
-const DEFAULT_MAX_CONNECTIONS: usize = defaults::MAX_CONNECTIONS;
-const DEFAULT_AUTH_REALM: &str = defaults::AUTH_REALM;
-
 /// Whitelisted environment variable names for proxy IPs.
 ///
 /// This prevents arbitrary environment variable disclosure via `TRUSTED_PROXY_IPS_VAR`.
@@ -168,11 +155,11 @@ pub fn get_rate_limit_config() -> &'static RateLimitConfig {
 /// Invalid values fall back to defaults and log warnings
 fn compute_rate_limit_config() -> RateLimitConfig {
     let max_requests =
-        parse_env_var_or_default(env_vars::RATE_LIMIT_REQUESTS, DEFAULT_RATE_LIMIT_REQUESTS);
+        parse_env_var_or_default(env_vars::RATE_LIMIT_REQUESTS, defaults::RATE_LIMIT_REQUESTS);
 
     let window_secs = parse_env_var_or_default(
         env_vars::RATE_LIMIT_WINDOW_SECS,
-        DEFAULT_RATE_LIMIT_WINDOW_SECS,
+        defaults::RATE_LIMIT_WINDOW_SECS,
     );
 
     let config = RateLimitConfig {
@@ -184,8 +171,8 @@ fn compute_rate_limit_config() -> RateLimitConfig {
     if !config.is_valid() {
         warn!("Invalid rate limit configuration, using defaults");
         return RateLimitConfig {
-            max_requests: DEFAULT_RATE_LIMIT_REQUESTS,
-            window_duration: Duration::from_secs(DEFAULT_RATE_LIMIT_WINDOW_SECS),
+            max_requests: defaults::RATE_LIMIT_REQUESTS,
+            window_duration: Duration::from_secs(defaults::RATE_LIMIT_WINDOW_SECS),
         };
     }
 
@@ -218,12 +205,12 @@ pub fn get_rate_limit_cleanup_config() -> &'static RateLimitCleanupConfig {
 fn compute_rate_limit_cleanup_config() -> RateLimitCleanupConfig {
     let threshold = parse_env_var_or_default(
         env_vars::RATE_LIMIT_CLEANUP_THRESHOLD,
-        DEFAULT_RATE_LIMIT_CLEANUP_THRESHOLD,
+        defaults::RATE_LIMIT_CLEANUP_THRESHOLD,
     );
 
     let interval_secs = parse_env_var_or_default(
         env_vars::RATE_LIMIT_CLEANUP_INTERVAL_SECS,
-        DEFAULT_RATE_LIMIT_CLEANUP_INTERVAL_SECS,
+        defaults::RATE_LIMIT_CLEANUP_INTERVAL_SECS,
     );
 
     RateLimitCleanupConfig {
@@ -255,10 +242,10 @@ pub fn get_proxy_config() -> &'static ProxyConfig {
 /// Computes proxy configuration from environment variables.
 fn compute_proxy_config() -> ProxyConfig {
     let timeout_secs =
-        parse_env_var_or_default(env_vars::PROXY_TIMEOUT_SECS, DEFAULT_PROXY_TIMEOUT_SECS);
+        parse_env_var_or_default(env_vars::PROXY_TIMEOUT_SECS, defaults::PROXY_TIMEOUT_SECS);
 
     let max_body_mb =
-        parse_env_var_or_default(env_vars::MAX_BODY_SIZE_MB, DEFAULT_MAX_BODY_SIZE_MB);
+        parse_env_var_or_default(env_vars::MAX_BODY_SIZE_MB, defaults::MAX_BODY_SIZE_MB);
 
     let config = ProxyConfig {
         timeout: Duration::from_secs(timeout_secs),
@@ -269,8 +256,8 @@ fn compute_proxy_config() -> ProxyConfig {
     if !config.is_valid() {
         warn!("Invalid proxy configuration, using defaults");
         return ProxyConfig {
-            timeout: Duration::from_secs(DEFAULT_PROXY_TIMEOUT_SECS),
-            max_body_size: ProxyConfig::mb_to_bytes(DEFAULT_MAX_BODY_SIZE_MB),
+            timeout: Duration::from_secs(defaults::PROXY_TIMEOUT_SECS),
+            max_body_size: ProxyConfig::mb_to_bytes(defaults::MAX_BODY_SIZE_MB),
         };
     }
 
@@ -309,7 +296,7 @@ pub fn get_max_connections() -> usize {
 
 /// Computes maximum connections from environment variable.
 fn compute_max_connections() -> usize {
-    parse_env_var_or_default(env_vars::MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS)
+    parse_env_var_or_default(env_vars::MAX_CONNECTIONS, defaults::MAX_CONNECTIONS)
 }
 
 /// Returns the cached list of allowed proxy IPs, if configured.
@@ -538,7 +525,7 @@ pub fn get_auth_realm() -> &'static str {
 
 /// Computes authentication realm from environment variable.
 fn compute_auth_realm() -> String {
-    env::var(env_vars::CC_HTTP_BASIC_AUTH_REALM).unwrap_or_else(|_| DEFAULT_AUTH_REALM.to_string())
+    env::var(env_vars::CC_HTTP_BASIC_AUTH_REALM).unwrap_or_else(|_| defaults::AUTH_REALM.to_string())
 }
 
 /// Returns true if authentication is enabled (credentials configured).
