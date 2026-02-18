@@ -65,26 +65,27 @@ pub async fn handle_request<C: ConfigProvider>(
     http_client: reqwest::Client,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     // Extract and validate real client IP
-    let real_client_ip =
+    let real_client_ip: Option<String> =
         match ip_filter::extract_and_validate_real_ip(req.headers(), config.as_ref()) {
-            Some(ip) => ip,
+            Some(ip) => Some(ip),
             None => {
-                // In permissive mode (no allowlist configured), we couldn't extract IP from headers
-                // Use placeholder IP and continue with non-IP-based security features only
                 if config.allowed_proxy_ips().is_none() {
-                    "unknown".to_string()
+                    // Permissive mode: continue without IP-based security
+                    None
                 } else {
-                    // If allowlist is configured but validation failed, reject the request
+                    // Strict mode: reject when proxy validation fails
                     let err = WiseGateError::InvalidIp("missing or invalid proxy headers".into());
                     return Ok(create_error_response(err.status_code(), err.user_message()));
                 }
             }
         };
 
-    // Check if IP is blocked (skip if IP is unknown)
-    if real_client_ip != "unknown" && ip_filter::is_ip_blocked(&real_client_ip, config.as_ref()) {
-        let err = WiseGateError::IpBlocked(real_client_ip);
-        return Ok(create_error_response(err.status_code(), err.user_message()));
+    // Check if IP is blocked
+    if let Some(ref ip) = real_client_ip {
+        if ip_filter::is_ip_blocked(ip, config.as_ref()) {
+            let err = WiseGateError::IpBlocked(ip.clone());
+            return Ok(create_error_response(err.status_code(), err.user_message()));
+        }
     }
 
     // Check for blocked URL patterns
@@ -123,18 +124,18 @@ pub async fn handle_request<C: ConfigProvider>(
         }
     }
 
-    // Apply rate limiting (skip if IP is unknown)
-    if real_client_ip != "unknown"
-        && !rate_limiter::check_rate_limit(&limiter, &real_client_ip, config.as_ref()).await
-    {
-        let err = WiseGateError::RateLimitExceeded(real_client_ip);
-        return Ok(create_error_response(err.status_code(), err.user_message()));
+    // Apply rate limiting (only when IP is known)
+    if let Some(ref ip) = real_client_ip {
+        if !rate_limiter::check_rate_limit(&limiter, ip, config.as_ref()).await {
+            let err = WiseGateError::RateLimitExceeded(ip.clone());
+            return Ok(create_error_response(err.status_code(), err.user_message()));
+        }
     }
 
-    // Add X-Real-IP header for upstream service (only if we have a real IP)
+    // Add X-Real-IP header for upstream service
     let mut req = req;
-    if real_client_ip != "unknown"
-        && let Ok(header_value) = real_client_ip.parse()
+    if let Some(ref ip) = real_client_ip
+        && let Ok(header_value) = ip.parse()
     {
         req.headers_mut().insert("x-real-ip", header_value);
     }
