@@ -141,10 +141,18 @@ fn print_env_config() {
 
 /// Masks sensitive values in environment variable display.
 ///
-/// Returns "[CONFIGURED]" for variables containing "IP" or "PROXY",
-/// otherwise returns the original value.
+/// Returns "[CONFIGURED]" for variables containing sensitive keywords
+/// like "IP", "PROXY", "AUTH", "TOKEN", "BEARER", or "PASSWORD".
 fn mask_sensitive_value(var_name: &str, value: &str) -> String {
-    if var_name.contains("IP") || var_name.contains("PROXY") {
+    let upper = var_name.to_uppercase();
+    if upper.contains("IP")
+        || upper.contains("PROXY")
+        || upper.contains("AUTH")
+        || upper.contains("TOKEN")
+        || upper.contains("BEARER")
+        || upper.contains("PASSWORD")
+        || upper.contains("SECRET")
+    {
         "[CONFIGURED]".to_string()
     } else {
         value.to_string()
@@ -238,6 +246,26 @@ mod tests {
         );
         assert_eq!(
             mask_sensitive_value("TRUSTED_PROXY_IPS_VAR", "CUSTOM_VAR"),
+            "[CONFIGURED]"
+        );
+    }
+
+    #[test]
+    fn test_mask_sensitive_value_with_auth() {
+        assert_eq!(
+            mask_sensitive_value("CC_HTTP_BASIC_AUTH", "admin:secret"),
+            "[CONFIGURED]"
+        );
+        assert_eq!(
+            mask_sensitive_value("CC_HTTP_BASIC_AUTH_REALM", "MyRealm"),
+            "[CONFIGURED]"
+        );
+    }
+
+    #[test]
+    fn test_mask_sensitive_value_with_token() {
+        assert_eq!(
+            mask_sensitive_value("CC_BEARER_TOKEN", "my-secret-token"),
             "[CONFIGURED]"
         );
     }
