@@ -390,10 +390,14 @@ fn is_url_pattern_blocked(path: &str, config: &impl ConfigProvider) -> bool {
     // Decode URL-encoded path to prevent bypass attacks
     let decoded_path = url_decode(path);
 
-    // Check against both original and decoded path
-    blocked_patterns
-        .iter()
-        .any(|pattern| path.contains(pattern) || decoded_path.contains(pattern))
+    // Case-insensitive matching to prevent bypass via case variation
+    let path_lower = path.to_lowercase();
+    let decoded_lower = decoded_path.to_lowercase();
+
+    blocked_patterns.iter().any(|pattern| {
+        let pattern_lower = pattern.to_lowercase();
+        path_lower.contains(&pattern_lower) || decoded_lower.contains(&pattern_lower)
+    })
 }
 
 /// Decode URL-encoded string (percent-encoding)
@@ -559,12 +563,13 @@ mod tests {
     }
 
     #[test]
-    fn test_url_pattern_blocked_case_sensitive() {
-        let config = TestConfig::new().with_blocked_patterns(vec![".PHP"]);
+    fn test_url_pattern_blocked_case_insensitive() {
+        let config = TestConfig::new().with_blocked_patterns(vec![".php"]);
 
-        // Pattern matching is case-sensitive
+        // Pattern matching is case-insensitive to prevent bypass
         assert!(is_url_pattern_blocked("/file.PHP", &config));
-        assert!(!is_url_pattern_blocked("/file.php", &config)); // Different case
+        assert!(is_url_pattern_blocked("/file.php", &config));
+        assert!(is_url_pattern_blocked("/file.Php", &config));
     }
 
     #[test]
