@@ -241,10 +241,11 @@ async fn forward_with_reqwest(
         }
     };
 
-    // Add headers (excluding host and content-length)
+    // Add headers (excluding host, content-length, and hop-by-hop headers per RFC 7230)
     for (name, value) in parts.headers.iter() {
         if name != "host"
             && name != "content-length"
+            && !headers::is_hop_by_hop(name.as_str())
             && let Ok(header_value) = value.to_str()
         {
             req_builder = req_builder.header(name.as_str(), header_value);
