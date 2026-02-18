@@ -81,11 +81,11 @@ pub async fn handle_request<C: ConfigProvider>(
         };
 
     // Check if IP is blocked
-    if let Some(ref ip) = real_client_ip {
-        if ip_filter::is_ip_blocked(ip, config.as_ref()) {
-            let err = WiseGateError::IpBlocked(ip.clone());
-            return Ok(create_error_response(err.status_code(), err.user_message()));
-        }
+    if let Some(ref ip) = real_client_ip
+        && ip_filter::is_ip_blocked(ip, config.as_ref())
+    {
+        let err = WiseGateError::IpBlocked(ip.clone());
+        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     // Check for blocked URL patterns
@@ -125,11 +125,11 @@ pub async fn handle_request<C: ConfigProvider>(
     }
 
     // Apply rate limiting (only when IP is known)
-    if let Some(ref ip) = real_client_ip {
-        if !rate_limiter::check_rate_limit(&limiter, ip, config.as_ref()).await {
-            let err = WiseGateError::RateLimitExceeded(ip.clone());
-            return Ok(create_error_response(err.status_code(), err.user_message()));
-        }
+    if let Some(ref ip) = real_client_ip
+        && !rate_limiter::check_rate_limit(&limiter, ip, config.as_ref()).await
+    {
+        let err = WiseGateError::RateLimitExceeded(ip.clone());
+        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     // Add X-Real-IP header for upstream service
@@ -163,21 +163,19 @@ async fn forward_request(
     let (parts, body) = req.into_parts();
 
     // Early rejection based on Content-Length header to prevent memory exhaustion
-    if proxy_config.max_body_size > 0 {
-        if let Some(content_length) = parts
+    if proxy_config.max_body_size > 0
+        && let Some(content_length) = parts
             .headers
             .get("content-length")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<usize>().ok())
-        {
-            if content_length > proxy_config.max_body_size {
-                let err = WiseGateError::BodyTooLarge {
-                    size: content_length,
-                    max: proxy_config.max_body_size,
-                };
-                return Ok(create_error_response(err.status_code(), err.user_message()));
-            }
-        }
+        && content_length > proxy_config.max_body_size
+    {
+        let err = WiseGateError::BodyTooLarge {
+            size: content_length,
+            max: proxy_config.max_body_size,
+        };
+        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     let body_bytes = match body.collect().await {

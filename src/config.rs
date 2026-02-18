@@ -485,10 +485,19 @@ fn compute_auth_credentials() -> Credentials {
 
     // Check CC_HTTP_BASIC_AUTH_1, CC_HTTP_BASIC_AUTH_2, etc.
     let mut index = 1;
+    let mut consecutive_missing = 0;
     loop {
         let var_name = format!("{}{}", env_vars::CC_HTTP_BASIC_AUTH_N, index);
         match env::var(&var_name) {
             Ok(value) => {
+                if consecutive_missing > 0 {
+                    warn!(
+                        gap_at = index - consecutive_missing,
+                        found_at = index,
+                        "Gap in numbered credentials, some may have been skipped"
+                    );
+                }
+                consecutive_missing = 0;
                 if let Some(cred) = Credential::parse(&value) {
                     entries.push(cred);
                 } else {
@@ -496,7 +505,14 @@ fn compute_auth_credentials() -> Credentials {
                 }
                 index += 1;
             }
-            Err(_) => break,
+            Err(_) => {
+                consecutive_missing += 1;
+                // Stop after 3 consecutive missing to handle gaps
+                if consecutive_missing >= 3 {
+                    break;
+                }
+                index += 1;
+            }
         }
     }
 
@@ -525,7 +541,8 @@ pub fn get_auth_realm() -> &'static str {
 
 /// Computes authentication realm from environment variable.
 fn compute_auth_realm() -> String {
-    env::var(env_vars::CC_HTTP_BASIC_AUTH_REALM).unwrap_or_else(|_| defaults::AUTH_REALM.to_string())
+    env::var(env_vars::CC_HTTP_BASIC_AUTH_REALM)
+        .unwrap_or_else(|_| defaults::AUTH_REALM.to_string())
 }
 
 /// Returns true if authentication is enabled (credentials configured).

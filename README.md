@@ -50,7 +50,7 @@ All configuration via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CC_REVERSE_PROXY_IPS` | - | Trusted proxy IPs (enables strict mode) |
-| `TRUSTED_PROXY_IPS_VAR` | - | Alternative variable name for proxy IPs |
+| `TRUSTED_PROXY_IPS_VAR` | - | Alternative variable name for proxy IPs (whitelisted: `TRUSTED_PROXY_IPS`, `REVERSE_PROXY_IPS`, `PROXY_ALLOWLIST`, `ALLOWED_PROXY_IPS`, `PROXY_IPS`) |
 | `BLOCKED_IPS` | - | Blocked client IPs |
 | `BLOCKED_METHODS` | - | Blocked HTTP methods (returns 405) |
 | `BLOCKED_PATTERNS` | - | Blocked URL patterns (returns 404) |
@@ -194,38 +194,61 @@ wisegate-core = "0.10"
 
 ```rust
 use wisegate_core::{
-    ConfigProvider, RateLimiter, RateLimitConfig, RateLimitCleanupConfig,
-    ProxyConfig, request_handler, ip_filter, rate_limiter
+    RateLimitingProvider, ProxyProvider, FilteringProvider,
+    ConnectionProvider, AuthenticationProvider, Credentials,
+    RateLimiter, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig,
+    request_handler, ip_filter, rate_limiter,
 };
 use std::sync::Arc;
 use std::time::Duration;
 
-// Implement your own configuration provider
-struct MyConfig {
-    rate_limit: RateLimitConfig,
-    proxy: ProxyConfig,
-    // ... your fields
-}
+// Implement composable configuration traits
+struct MyConfig { credentials: Credentials }
 
-impl ConfigProvider for MyConfig {
-    fn rate_limit_config(&self) -> &RateLimitConfig { &self.rate_limit }
-    fn proxy_config(&self) -> &ProxyConfig { &self.proxy }
-    // ... implement other methods
+impl RateLimitingProvider for MyConfig {
+    fn rate_limit_config(&self) -> &RateLimitConfig {
+        static C: RateLimitConfig = RateLimitConfig {
+            max_requests: 100, window_duration: Duration::from_secs(60),
+        };
+        &C
+    }
+    fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
+        static C: RateLimitCleanupConfig = RateLimitCleanupConfig {
+            threshold: 10_000, interval: Duration::from_secs(60),
+        };
+        &C
+    }
+}
+impl ProxyProvider for MyConfig {
+    fn proxy_config(&self) -> &ProxyConfig {
+        static C: ProxyConfig = ProxyConfig {
+            timeout: Duration::from_secs(30), max_body_size: 100 * 1024 * 1024,
+        };
+        &C
+    }
+    fn allowed_proxy_ips(&self) -> Option<&[String]> { None }
+}
+impl FilteringProvider for MyConfig {
+    fn blocked_ips(&self) -> &[String] { &[] }
+    fn blocked_methods(&self) -> &[String] { &[] }
+    fn blocked_patterns(&self) -> &[String] { &[] }
+}
+impl ConnectionProvider for MyConfig {
+    fn max_connections(&self) -> usize { 10_000 }
+}
+impl AuthenticationProvider for MyConfig {
+    fn auth_credentials(&self) -> &Credentials { &self.credentials }
+    fn auth_realm(&self) -> &str { "MyApp" }
+    fn bearer_token(&self) -> Option<&str> { None }
 }
 
 // Use the components
 let limiter = RateLimiter::new();
-let config = Arc::new(MyConfig::new());
-let http_client = reqwest::Client::new();
+let config = Arc::new(MyConfig { credentials: Credentials::new() });
 
-// Full request handling pipeline
-let response = request_handler::handle_request(
-    req, host, port, limiter, config, http_client
-).await;
-
-// Or use individual components
-let is_blocked = ip_filter::is_ip_blocked("192.168.1.1", &config);
-let allowed = rate_limiter::check_rate_limit(&limiter, "192.168.1.1", &config).await;
+// Individual components
+let is_blocked = ip_filter::is_ip_blocked("192.168.1.1", &*config);
+let allowed = rate_limiter::check_rate_limit(&limiter, "192.168.1.1", &*config).await;
 ```
 
 ## 🛠️ Development
