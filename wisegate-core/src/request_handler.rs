@@ -160,11 +160,30 @@ async fn forward_request(
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     let proxy_config = config.proxy_config();
     let (parts, body) = req.into_parts();
+
+    // Early rejection based on Content-Length header to prevent memory exhaustion
+    if proxy_config.max_body_size > 0 {
+        if let Some(content_length) = parts
+            .headers
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<usize>().ok())
+        {
+            if content_length > proxy_config.max_body_size {
+                let err = WiseGateError::BodyTooLarge {
+                    size: content_length,
+                    max: proxy_config.max_body_size,
+                };
+                return Ok(create_error_response(err.status_code(), err.user_message()));
+            }
+        }
+    }
+
     let body_bytes = match body.collect().await {
         Ok(bytes) => {
             let collected_bytes = bytes.to_bytes();
 
-            // Check body size limit
+            // Check actual body size (Content-Length may be absent or inaccurate)
             if proxy_config.max_body_size > 0 && collected_bytes.len() > proxy_config.max_body_size
             {
                 let err = WiseGateError::BodyTooLarge {
