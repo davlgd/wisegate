@@ -285,9 +285,8 @@ async fn forward_with_reqwest(
 
                     // Copy response headers (skip hop-by-hop headers)
                     for (name, value) in resp_headers.iter() {
-                        let header_name = name.as_str().to_lowercase();
                         // Skip hop-by-hop headers that shouldn't be forwarded
-                        if !headers::is_hop_by_hop(&header_name)
+                        if !headers::is_hop_by_hop(name.as_str())
                             && let (Ok(hyper_name), Ok(hyper_value)) = (
                                 hyper::header::HeaderName::from_bytes(name.as_str().as_bytes()),
                                 hyper::header::HeaderValue::from_bytes(value.as_bytes()),

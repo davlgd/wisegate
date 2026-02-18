@@ -65,9 +65,11 @@ pub const HOP_BY_HOP_HEADERS: &[&str] = &[
 
 /// Check if a header is a hop-by-hop header that shouldn't be forwarded.
 ///
+/// Comparison is case-insensitive (ASCII), avoiding allocations from `to_lowercase()`.
+///
 /// # Arguments
 ///
-/// * `header_name` - The header name to check (lowercase).
+/// * `header_name` - The header name to check.
 ///
 /// # Returns
 ///
@@ -79,11 +81,13 @@ pub const HOP_BY_HOP_HEADERS: &[&str] = &[
 /// use wisegate_core::headers::is_hop_by_hop;
 ///
 /// assert!(is_hop_by_hop("connection"));
-/// assert!(is_hop_by_hop("transfer-encoding"));
+/// assert!(is_hop_by_hop("Transfer-Encoding"));
 /// assert!(!is_hop_by_hop("content-type"));
 /// ```
 pub fn is_hop_by_hop(header_name: &str) -> bool {
-    HOP_BY_HOP_HEADERS.contains(&header_name)
+    HOP_BY_HOP_HEADERS
+        .iter()
+        .any(|h| h.eq_ignore_ascii_case(header_name))
 }
 
 #[cfg(test)]
