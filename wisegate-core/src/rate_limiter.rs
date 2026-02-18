@@ -38,13 +38,9 @@
 //! ```
 
 use std::time::Instant;
-use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::types::{ConfigProvider, RateLimitEntry, RateLimiter};
-
-/// Tracks the last cleanup time to enforce minimum interval between cleanups.
-static LAST_CLEANUP: Mutex<Option<Instant>> = Mutex::const_new(None);
 
 /// Checks if a request from the given IP should be allowed based on rate limits.
 ///
@@ -95,7 +91,7 @@ pub async fn check_rate_limit(
     // Perform cleanup if needed (threshold exceeded and interval passed)
     if cleanup_config.is_enabled() && rate_map.len() > cleanup_config.threshold {
         let should_cleanup = {
-            let mut last_cleanup = LAST_CLEANUP.lock().await;
+            let mut last_cleanup = limiter.last_cleanup().lock().await;
             match *last_cleanup {
                 None => {
                     *last_cleanup = Some(now);

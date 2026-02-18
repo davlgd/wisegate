@@ -343,7 +343,8 @@ impl Default for RateLimitEntry {
 
 /// Thread-safe rate limiter state shared across all connections.
 ///
-/// Wraps a HashMap mapping IP addresses to their rate limit entries.
+/// Wraps a HashMap mapping IP addresses to their rate limit entries,
+/// along with per-instance cleanup tracking state.
 /// Uses `tokio::sync::Mutex` for async-friendly locking that won't block
 /// the Tokio thread pool.
 ///
@@ -357,6 +358,7 @@ impl Default for RateLimitEntry {
 #[derive(Clone)]
 pub struct RateLimiter {
     inner: Arc<Mutex<HashMap<String, RateLimitEntry>>>,
+    last_cleanup: Arc<Mutex<Option<Instant>>>,
 }
 
 impl RateLimiter {
@@ -364,12 +366,28 @@ impl RateLimiter {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(HashMap::new())),
+            last_cleanup: Arc::new(Mutex::const_new(None)),
         }
     }
 
     /// Returns a reference to the inner mutex-protected map.
-    pub fn inner(&self) -> &Arc<Mutex<HashMap<String, RateLimitEntry>>> {
+    pub(crate) fn inner(&self) -> &Arc<Mutex<HashMap<String, RateLimitEntry>>> {
         &self.inner
+    }
+
+    /// Returns a reference to the last cleanup timestamp.
+    pub(crate) fn last_cleanup(&self) -> &Arc<Mutex<Option<Instant>>> {
+        &self.last_cleanup
+    }
+
+    /// Returns the number of tracked IPs.
+    pub async fn entry_count(&self) -> usize {
+        self.inner.lock().await.len()
+    }
+
+    /// Returns true if no IPs are being tracked.
+    pub async fn is_empty(&self) -> bool {
+        self.inner.lock().await.is_empty()
     }
 }
 
