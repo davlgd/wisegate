@@ -171,7 +171,12 @@ pub fn check_bearer_token(auth_header: Option<&str>, expected_token: Option<&str
         return false;
     };
 
-    let Some(token) = header.strip_prefix("Bearer ") else {
+    // RFC 6750: auth-scheme is case-insensitive
+    let Some(token) = header
+        .get(..7)
+        .filter(|prefix| prefix.eq_ignore_ascii_case("bearer "))
+        .map(|_| &header[7..])
+    else {
         return false;
     };
 
@@ -321,6 +326,7 @@ mod tests {
             "secret".to_string(),
         )]);
         assert!(!creds.verify("Bearer some-token"));
+        assert!(!creds.verify("bearer some-token"));
     }
 
     #[test]
@@ -414,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn test_check_bearer_token_case_sensitive() {
+    fn test_check_bearer_token_value_case_sensitive() {
         let token = "MySecretToken";
         assert!(check_bearer_token(
             Some("Bearer MySecretToken"),
@@ -422,6 +428,24 @@ mod tests {
         ));
         assert!(!check_bearer_token(
             Some("Bearer mysecrettoken"),
+            Some(token)
+        ));
+    }
+
+    #[test]
+    fn test_check_bearer_token_prefix_case_insensitive() {
+        // RFC 6750: auth-scheme is case-insensitive
+        let token = "my-secret-token";
+        assert!(check_bearer_token(
+            Some("bearer my-secret-token"),
+            Some(token)
+        ));
+        assert!(check_bearer_token(
+            Some("BEARER my-secret-token"),
+            Some(token)
+        ));
+        assert!(check_bearer_token(
+            Some("Bearer my-secret-token"),
             Some(token)
         ));
     }
