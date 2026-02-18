@@ -149,12 +149,10 @@ async fn main() {
                 let config = env_config.clone();
                 let client = http_client.clone();
 
-                // Increment active connection count
-                tracker.increment();
-
                 tokio::task::spawn(async move {
-                    // Keep permit alive for the duration of the connection
+                    // RAII guards: both dropped automatically when task ends (even on panic)
                     let _permit = permit;
+                    let _conn_guard = tracker.track();
 
                     let service = service_fn(move |req| {
                         request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone(), config.clone(), client.clone())
@@ -163,9 +161,6 @@ async fn main() {
                     if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
                         warn!(client = %addr, error = %err, "Connection error");
                     }
-
-                    // Decrement active connection count
-                    tracker.decrement();
                 });
             }
 

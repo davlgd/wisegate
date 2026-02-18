@@ -24,19 +24,18 @@ impl ConnectionTracker {
         }
     }
 
-    /// Increment active connection count.
-    pub fn increment(&self) {
-        self.active.fetch_add(1, Ordering::SeqCst);
-    }
-
-    /// Decrement active connection count.
-    pub fn decrement(&self) {
-        self.active.fetch_sub(1, Ordering::SeqCst);
+    /// Acquire an RAII guard that increments the counter on creation
+    /// and decrements it on drop, ensuring correct tracking even on panic.
+    pub fn track(&self) -> ConnectionGuard {
+        self.active.fetch_add(1, Ordering::AcqRel);
+        ConnectionGuard {
+            active: self.active.clone(),
+        }
     }
 
     /// Get current active connection count.
     pub fn count(&self) -> usize {
-        self.active.load(Ordering::SeqCst)
+        self.active.load(Ordering::Acquire)
     }
 
     /// Wait for all connections to finish with timeout.
@@ -58,6 +57,23 @@ impl ConnectionTracker {
 impl Default for ConnectionTracker {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// RAII guard that decrements the connection count on drop.
+///
+/// Uses saturating subtraction to prevent underflow.
+#[derive(Debug)]
+pub struct ConnectionGuard {
+    active: Arc<AtomicUsize>,
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        let prev = self.active.fetch_update(Ordering::AcqRel, Ordering::Acquire, |val| {
+            Some(val.saturating_sub(1))
+        });
+        debug_assert!(prev.is_ok_and(|v| v > 0), "Connection count underflow");
     }
 }
 
@@ -126,21 +142,16 @@ mod tests {
     }
 
     #[test]
-    fn test_connection_tracker_increment() {
+    fn test_connection_tracker_track_and_drop() {
         let tracker = ConnectionTracker::new();
-        tracker.increment();
+        let guard1 = tracker.track();
         assert_eq!(tracker.count(), 1);
-        tracker.increment();
+        let guard2 = tracker.track();
         assert_eq!(tracker.count(), 2);
-    }
-
-    #[test]
-    fn test_connection_tracker_decrement() {
-        let tracker = ConnectionTracker::new();
-        tracker.increment();
-        tracker.increment();
-        tracker.decrement();
+        drop(guard1);
         assert_eq!(tracker.count(), 1);
+        drop(guard2);
+        assert_eq!(tracker.count(), 0);
     }
 
     #[test]
@@ -148,10 +159,10 @@ mod tests {
         let tracker1 = ConnectionTracker::new();
         let tracker2 = tracker1.clone();
 
-        tracker1.increment();
+        let _guard1 = tracker1.track();
         assert_eq!(tracker2.count(), 1);
 
-        tracker2.increment();
+        let _guard2 = tracker2.track();
         assert_eq!(tracker1.count(), 2);
     }
 
@@ -165,12 +176,11 @@ mod tests {
     #[tokio::test]
     async fn test_connection_tracker_wait_for_shutdown_with_connections() {
         let tracker = ConnectionTracker::new();
-        tracker.increment();
+        let guard = tracker.track();
 
-        let tracker_clone = tracker.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
-            tracker_clone.decrement();
+            drop(guard);
         });
 
         let result = tracker.wait_for_shutdown(Duration::from_millis(200)).await;
@@ -181,7 +191,7 @@ mod tests {
     #[tokio::test]
     async fn test_connection_tracker_wait_for_shutdown_timeout() {
         let tracker = ConnectionTracker::new();
-        tracker.increment();
+        let _guard = tracker.track();
 
         let result = tracker.wait_for_shutdown(Duration::from_millis(50)).await;
         assert!(!result);
