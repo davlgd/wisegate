@@ -32,6 +32,9 @@ struct TestEnvironment {
     wisegate_process: Option<Child>,
     backend_port: u16,
     wisegate_port: u16,
+    basic_auth: Option<(String, String)>,
+    bearer_token: Option<String>,
+    env_vars: Vec<(String, String)>,
 }
 
 impl TestEnvironment {
@@ -44,7 +47,26 @@ impl TestEnvironment {
             wisegate_process: None,
             backend_port,
             wisegate_port,
+            basic_auth: None,
+            bearer_token: None,
+            env_vars: vec![
+                ("RATE_LIMIT_REQUESTS".into(), "5".into()),
+                ("RATE_LIMIT_WINDOW_SECS".into(), "10".into()),
+                ("BLOCKED_METHODS".into(), "TRACE,CONNECT".into()),
+                ("BLOCKED_PATTERNS".into(), ".env,.git,admin".into()),
+                ("PROXY_TIMEOUT_SECS".into(), "5".into()),
+            ],
         }
+    }
+
+    fn with_basic_auth(mut self, user: &str, pass: &str) -> Self {
+        self.basic_auth = Some((user.to_string(), pass.to_string()));
+        self
+    }
+
+    fn with_bearer_token(mut self, token: &str) -> Self {
+        self.bearer_token = Some(token.to_string());
+        self
     }
 
     fn setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -53,13 +75,34 @@ impl TestEnvironment {
 
         // Start backend server
         self.start_backend()?;
-        thread::sleep(Duration::from_secs(1));
+
+        // Wait for backend to be ready (poll instead of fixed sleep)
+        self.wait_for_port_in_use(self.backend_port, Duration::from_secs(10))?;
+        thread::sleep(Duration::from_millis(500));
 
         // Start WiseGate with test configuration
         self.start_wisegate()?;
-        thread::sleep(Duration::from_secs(2));
+
+        // Wait for WiseGate to be ready
+        self.wait_for_port_in_use(self.wisegate_port, Duration::from_secs(10))?;
+        thread::sleep(Duration::from_millis(500));
 
         Ok(())
+    }
+
+    fn wait_for_port_in_use(
+        &self,
+        port: u16,
+        timeout: Duration,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let start = Instant::now();
+        while start.elapsed() < timeout {
+            if TcpListener::bind(format!("127.0.0.1:{port}")).is_err() {
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        Err(format!("Port {port} not in use after {timeout:?}").into())
     }
 
     fn build_wisegate(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -150,25 +193,31 @@ with socketserver.TCPServer(('localhost', {}), TestBackendHandler) as httpd:
     }
 
     fn start_wisegate(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.wisegate_process = Some(
-            Command::new("./target/release/wisegate")
-                .args([
-                    "-l",
-                    &self.wisegate_port.to_string(),
-                    "-f",
-                    &self.backend_port.to_string(),
-                    "--quiet",
-                ])
-                .env("RATE_LIMIT_REQUESTS", "5")
-                .env("RATE_LIMIT_WINDOW_SECS", "10")
-                .env("BLOCKED_METHODS", "TRACE,CONNECT")
-                .env("BLOCKED_PATTERNS", ".env,.git,admin")
-                .env("PROXY_TIMEOUT_SECS", "5")
-                .current_dir(env!("CARGO_MANIFEST_DIR"))
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()?,
-        );
+        let mut cmd = Command::new("./target/release/wisegate");
+        cmd.args([
+            "-l",
+            &self.wisegate_port.to_string(),
+            "-f",
+            &self.backend_port.to_string(),
+            "--quiet",
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+        for (key, value) in &self.env_vars {
+            cmd.env(key, value);
+        }
+
+        if let Some((ref user, ref pass)) = self.basic_auth {
+            cmd.env("CC_HTTP_BASIC_AUTH", format!("{user}:{pass}"));
+        }
+
+        if let Some(ref token) = self.bearer_token {
+            cmd.env("CC_BEARER_TOKEN", token);
+        }
+
+        self.wisegate_process = Some(cmd.spawn()?);
 
         Ok(())
     }
@@ -194,7 +243,11 @@ with socketserver.TCPServer(('localhost', {}), TestBackendHandler) as httpd:
             {
                 if output.status.success() {
                     let status_code = String::from_utf8_lossy(&output.stdout);
-                    if status_code == "200" || status_code == "404" || status_code == "405" {
+                    if status_code == "200"
+                        || status_code == "401"
+                        || status_code == "404"
+                        || status_code == "405"
+                    {
                         return true;
                     }
                 }
@@ -621,222 +674,18 @@ fn test_query_string_forwarding() {
 // Authentication Tests
 // ===========================================
 
-/// Test environment with authentication configured
-struct AuthTestEnvironment {
-    backend_process: Option<Child>,
-    wisegate_process: Option<Child>,
-    backend_port: u16,
-    wisegate_port: u16,
-    basic_auth_user: String,
-    basic_auth_pass: String,
-    bearer_token: Option<String>,
-}
-
-impl AuthTestEnvironment {
-    fn new_basic_auth(user: &str, pass: &str) -> Self {
-        let backend_port = get_available_port();
-        let wisegate_port = get_available_port();
-
-        Self {
-            backend_process: None,
-            wisegate_process: None,
-            backend_port,
-            wisegate_port,
-            basic_auth_user: user.to_string(),
-            basic_auth_pass: pass.to_string(),
-            bearer_token: None,
-        }
-    }
-
-    fn new_bearer_token(token: &str) -> Self {
-        let backend_port = get_available_port();
-        let wisegate_port = get_available_port();
-
-        Self {
-            backend_process: None,
-            wisegate_process: None,
-            backend_port,
-            wisegate_port,
-            basic_auth_user: String::new(),
-            basic_auth_pass: String::new(),
-            bearer_token: Some(token.to_string()),
-        }
-    }
-
-    fn new_combined(user: &str, pass: &str, token: &str) -> Self {
-        let backend_port = get_available_port();
-        let wisegate_port = get_available_port();
-
-        Self {
-            backend_process: None,
-            wisegate_process: None,
-            backend_port,
-            wisegate_port,
-            basic_auth_user: user.to_string(),
-            basic_auth_pass: pass.to_string(),
-            bearer_token: Some(token.to_string()),
-        }
-    }
-
-    fn setup(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Start backend server (same as TestEnvironment)
-        self.start_backend()?;
-
-        // Wait for backend to be ready (poll instead of fixed sleep)
-        let start = Instant::now();
-        let timeout = Duration::from_secs(10);
-        let mut backend_ready = false;
-        while start.elapsed() < timeout {
-            if TcpListener::bind(format!("127.0.0.1:{}", self.backend_port)).is_err() {
-                // Port is in use, backend is running
-                backend_ready = true;
-                break;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-        if !backend_ready {
-            return Err("Backend server failed to bind port".into());
-        }
-        // Additional wait for HTTP server to be fully ready
-        thread::sleep(Duration::from_millis(500));
-
-        // Start WiseGate with auth configuration
-        self.start_wisegate()?;
-
-        // Wait for WiseGate to be ready
-        let start = Instant::now();
-        while start.elapsed() < timeout {
-            if TcpListener::bind(format!("127.0.0.1:{}", self.wisegate_port)).is_err() {
-                // Port is in use, WiseGate is running
-                break;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-        // Additional wait for server to be fully ready
-        thread::sleep(Duration::from_millis(500));
-
-        Ok(())
-    }
-
-    fn start_backend(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let backend_script = format!(
-            r#"
-import http.server
-import socketserver
-import json
-import sys
-
-class TestBackendHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        response = {{'message': 'Authenticated request successful', 'path': self.path}}
-        self.wfile.write(json.dumps(response).encode())
-
-    def log_message(self, format, *args):
-        pass
-
-with socketserver.TCPServer(('localhost', {}), TestBackendHandler) as httpd:
-    httpd.serve_forever()
-"#,
-            self.backend_port
-        );
-
-        self.backend_process = Some(
-            Command::new("python3")
-                .arg("-c")
-                .arg(&backend_script)
-                .stderr(Stdio::piped())
-                .spawn()?,
-        );
-
-        Ok(())
-    }
-
-    fn start_wisegate(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut cmd = Command::new("./target/release/wisegate");
-        cmd.args([
-            "-l",
-            &self.wisegate_port.to_string(),
-            "-f",
-            &self.backend_port.to_string(),
-            "--quiet",
-        ])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-        // Configure authentication
-        if !self.basic_auth_user.is_empty() {
-            cmd.env(
-                "CC_HTTP_BASIC_AUTH",
-                format!("{}:{}", self.basic_auth_user, self.basic_auth_pass),
-            );
-        }
-
-        if let Some(ref token) = self.bearer_token {
-            cmd.env("CC_BEARER_TOKEN", token);
-        }
-
-        self.wisegate_process = Some(cmd.spawn()?);
-
-        Ok(())
-    }
-}
-
-impl Drop for AuthTestEnvironment {
-    fn drop(&mut self) {
-        if let Some(mut process) = self.wisegate_process.take() {
-            let _ = process.kill();
-            let _ = process.wait();
-        }
-        if let Some(mut process) = self.backend_process.take() {
-            let _ = process.kill();
-            let _ = process.wait();
-        }
-    }
-}
-
-fn make_auth_request(
-    env: &AuthTestEnvironment,
-    method: &str,
-    path: &str,
-    auth_header: Option<&str>,
-) -> Result<(u16, String), Box<dyn std::error::Error>> {
-    let mut cmd = Command::new("curl");
-    cmd.args(["-X", method])
-        .args([&format!("http://localhost:{}{}", env.wisegate_port, path)])
-        .args(["--max-time", "10"])
-        .args(["-w", "%{http_code}"])
-        .args(["-s"]);
-
-    if let Some(auth) = auth_header {
-        cmd.args(["-H", &format!("Authorization: {}", auth)]);
-    }
-
-    let output = cmd.output()?;
-    let response = String::from_utf8_lossy(&output.stdout);
-
-    if response.len() >= 3 {
-        let status_code = response[response.len() - 3..].parse::<u16>().unwrap_or(0);
-        let body = response[..response.len() - 3].to_string();
-        Ok((status_code, body))
-    } else {
-        Ok((0, response.to_string()))
-    }
-}
-
 #[test]
 #[ignore] // Requires release build and Python3
 fn test_basic_auth_required() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_basic_auth("admin", "secret123");
+    let mut env = TestEnvironment::new().with_basic_auth("admin", "secret123");
     env.setup().expect("Failed to setup auth test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
 
     // Request without auth should return 401
     let (status, _) =
-        make_auth_request(&env, "GET", "/", None).expect("Failed to make request without auth");
+        make_request(&env, "GET", "/", None, None).expect("Failed to make request without auth");
 
     assert_eq!(
         status, 401,
@@ -848,21 +697,29 @@ fn test_basic_auth_required() {
 #[ignore] // Requires release build and Python3
 fn test_basic_auth_valid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_basic_auth("admin", "secret123");
+    let mut env = TestEnvironment::new().with_basic_auth("admin", "secret123");
     env.setup().expect("Failed to setup auth test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
 
     // Request with valid Basic Auth
     use base64::{Engine, engine::general_purpose::STANDARD};
     let credentials = STANDARD.encode("admin:secret123");
-    let auth_header = format!("Basic {}", credentials);
+    let auth_header = format!("Basic {credentials}");
 
-    let (status, body) = make_auth_request(&env, "GET", "/", Some(&auth_header))
-        .expect("Failed to make request with Basic Auth");
+    let (status, body) = make_request(
+        &env,
+        "GET",
+        "/",
+        None,
+        Some(&[("Authorization", auth_header.as_str())]),
+    )
+    .expect("Failed to make request with Basic Auth");
 
     assert_eq!(status, 200, "Request with valid Basic Auth should succeed");
     assert!(
-        body.contains("Authenticated"),
-        "Response should indicate success"
+        body.contains("test-backend"),
+        "Response should come from backend"
     );
 }
 
@@ -870,16 +727,24 @@ fn test_basic_auth_valid() {
 #[ignore] // Requires release build and Python3
 fn test_basic_auth_invalid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_basic_auth("admin", "secret123");
+    let mut env = TestEnvironment::new().with_basic_auth("admin", "secret123");
     env.setup().expect("Failed to setup auth test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
 
     // Request with invalid Basic Auth
     use base64::{Engine, engine::general_purpose::STANDARD};
     let credentials = STANDARD.encode("admin:wrongpassword");
-    let auth_header = format!("Basic {}", credentials);
+    let auth_header = format!("Basic {credentials}");
 
-    let (status, _) = make_auth_request(&env, "GET", "/", Some(&auth_header))
-        .expect("Failed to make request with invalid Basic Auth");
+    let (status, _) = make_request(
+        &env,
+        "GET",
+        "/",
+        None,
+        Some(&[("Authorization", auth_header.as_str())]),
+    )
+    .expect("Failed to make request with invalid Basic Auth");
 
     assert_eq!(
         status, 401,
@@ -891,12 +756,14 @@ fn test_basic_auth_invalid() {
 #[ignore] // Requires release build and Python3
 fn test_bearer_token_required() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_bearer_token("my-secret-api-key");
+    let mut env = TestEnvironment::new().with_bearer_token("my-secret-api-key");
     env.setup().expect("Failed to setup auth test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
 
     // Request without auth should return 401
     let (status, _) =
-        make_auth_request(&env, "GET", "/", None).expect("Failed to make request without auth");
+        make_request(&env, "GET", "/", None, None).expect("Failed to make request without auth");
 
     assert_eq!(
         status, 401,
@@ -908,20 +775,28 @@ fn test_bearer_token_required() {
 #[ignore] // Requires release build and Python3
 fn test_bearer_token_valid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_bearer_token("my-secret-api-key");
+    let mut env = TestEnvironment::new().with_bearer_token("my-secret-api-key");
     env.setup().expect("Failed to setup auth test environment");
 
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
     // Request with valid Bearer Token
-    let (status, body) = make_auth_request(&env, "GET", "/", Some("Bearer my-secret-api-key"))
-        .expect("Failed to make request with Bearer Token");
+    let (status, body) = make_request(
+        &env,
+        "GET",
+        "/",
+        None,
+        Some(&[("Authorization", "Bearer my-secret-api-key")]),
+    )
+    .expect("Failed to make request with Bearer Token");
 
     assert_eq!(
         status, 200,
         "Request with valid Bearer Token should succeed"
     );
     assert!(
-        body.contains("Authenticated"),
-        "Response should indicate success"
+        body.contains("test-backend"),
+        "Response should come from backend"
     );
 }
 
@@ -929,12 +804,20 @@ fn test_bearer_token_valid() {
 #[ignore] // Requires release build and Python3
 fn test_bearer_token_invalid() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_bearer_token("my-secret-api-key");
+    let mut env = TestEnvironment::new().with_bearer_token("my-secret-api-key");
     env.setup().expect("Failed to setup auth test environment");
 
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
     // Request with invalid Bearer Token
-    let (status, _) = make_auth_request(&env, "GET", "/", Some("Bearer wrong-token"))
-        .expect("Failed to make request with invalid Bearer Token");
+    let (status, _) = make_request(
+        &env,
+        "GET",
+        "/",
+        None,
+        Some(&[("Authorization", "Bearer wrong-token")]),
+    )
+    .expect("Failed to make request with invalid Bearer Token");
 
     assert_eq!(
         status, 401,
@@ -946,52 +829,76 @@ fn test_bearer_token_invalid() {
 #[ignore] // Requires release build and Python3
 fn test_combined_auth_basic_works() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_combined("admin", "secret123", "my-api-key");
+    let mut env = TestEnvironment::new()
+        .with_basic_auth("admin", "secret123")
+        .with_bearer_token("my-api-key");
     env.setup().expect("Failed to setup auth test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
 
     // Request with Basic Auth should work when both are configured
     use base64::{Engine, engine::general_purpose::STANDARD};
     let credentials = STANDARD.encode("admin:secret123");
-    let auth_header = format!("Basic {}", credentials);
+    let auth_header = format!("Basic {credentials}");
 
-    let (status, body) = make_auth_request(&env, "GET", "/", Some(&auth_header))
-        .expect("Failed to make request with Basic Auth");
+    let (status, body) = make_request(
+        &env,
+        "GET",
+        "/",
+        None,
+        Some(&[("Authorization", auth_header.as_str())]),
+    )
+    .expect("Failed to make request with Basic Auth");
 
     assert_eq!(
         status, 200,
         "Basic Auth should work when both auth methods configured"
     );
-    assert!(body.contains("Authenticated"));
+    assert!(body.contains("test-backend"));
 }
 
 #[test]
 #[ignore] // Requires release build and Python3
 fn test_combined_auth_bearer_works() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_combined("admin", "secret123", "my-api-key");
+    let mut env = TestEnvironment::new()
+        .with_basic_auth("admin", "secret123")
+        .with_bearer_token("my-api-key");
     env.setup().expect("Failed to setup auth test environment");
 
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
+
     // Request with Bearer Token should work when both are configured
-    let (status, body) = make_auth_request(&env, "GET", "/", Some("Bearer my-api-key"))
-        .expect("Failed to make request with Bearer Token");
+    let (status, body) = make_request(
+        &env,
+        "GET",
+        "/",
+        None,
+        Some(&[("Authorization", "Bearer my-api-key")]),
+    )
+    .expect("Failed to make request with Bearer Token");
 
     assert_eq!(
         status, 200,
         "Bearer Token should work when both auth methods configured"
     );
-    assert!(body.contains("Authenticated"));
+    assert!(body.contains("test-backend"));
 }
 
 #[test]
 #[ignore] // Requires release build and Python3
 fn test_combined_auth_none_fails() {
     let _guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
-    let mut env = AuthTestEnvironment::new_combined("admin", "secret123", "my-api-key");
+    let mut env = TestEnvironment::new()
+        .with_basic_auth("admin", "secret123")
+        .with_bearer_token("my-api-key");
     env.setup().expect("Failed to setup auth test environment");
+
+    assert!(env.wait_for_service(env.wisegate_port, Duration::from_secs(5)));
 
     // Request without any auth should fail
     let (status, _) =
-        make_auth_request(&env, "GET", "/", None).expect("Failed to make request without auth");
+        make_request(&env, "GET", "/", None, None).expect("Failed to make request without auth");
 
     assert_eq!(
         status, 401,
