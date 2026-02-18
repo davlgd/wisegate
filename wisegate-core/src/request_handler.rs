@@ -255,7 +255,7 @@ async fn forward_with_reqwest(
 
     // Add body if not empty
     if !body_bytes.is_empty() {
-        req_builder = req_builder.body(body_bytes.to_vec());
+        req_builder = req_builder.body(body_bytes);
     }
 
     // Send request
