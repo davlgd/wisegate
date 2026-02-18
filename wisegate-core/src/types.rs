@@ -5,7 +5,7 @@
 //! - Proxy behavior configuration
 //! - Cleanup configuration for memory management
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -316,22 +316,31 @@ impl ProxyConfig {
 
 /// Entry for tracking rate limit state per IP address.
 ///
-/// Stores the timestamp of the window start and the request count.
+/// Uses a sliding window log algorithm: stores individual request timestamps
+/// in a deque, evicting expired ones on each check. This prevents the
+/// boundary-burst problem of fixed windows.
 #[derive(Clone, Debug)]
 pub struct RateLimitEntry {
-    /// Timestamp of the first request in the current window
-    pub window_start: Instant,
-    /// Number of requests in the current window
-    pub request_count: u32,
+    /// Timestamps of requests within the current window
+    pub(crate) timestamps: VecDeque<Instant>,
 }
 
 impl RateLimitEntry {
-    /// Creates a new rate limit entry with count of 1.
+    /// Creates a new rate limit entry with one request recorded now.
     pub fn new() -> Self {
-        Self {
-            window_start: Instant::now(),
-            request_count: 1,
-        }
+        let mut timestamps = VecDeque::new();
+        timestamps.push_back(Instant::now());
+        Self { timestamps }
+    }
+
+    /// Returns the number of requests in the current window.
+    pub fn request_count(&self) -> u32 {
+        self.timestamps.len() as u32
+    }
+
+    /// Returns the oldest timestamp, if any.
+    pub fn oldest(&self) -> Option<Instant> {
+        self.timestamps.front().copied()
     }
 }
 
@@ -545,15 +554,15 @@ mod tests {
     #[test]
     fn test_rate_limit_entry_new() {
         let entry = RateLimitEntry::new();
-        assert_eq!(entry.request_count, 1);
-        // window_start should be close to now (within a few ms)
-        assert!(entry.window_start.elapsed() < Duration::from_millis(100));
+        assert_eq!(entry.request_count(), 1);
+        // oldest timestamp should be close to now (within a few ms)
+        assert!(entry.oldest().unwrap().elapsed() < Duration::from_millis(100));
     }
 
     #[test]
     fn test_rate_limit_entry_default() {
         let entry = RateLimitEntry::default();
-        assert_eq!(entry.request_count, 1);
+        assert_eq!(entry.request_count(), 1);
     }
 
     // ===========================================

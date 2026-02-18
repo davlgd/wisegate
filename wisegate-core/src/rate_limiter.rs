@@ -1,15 +1,15 @@
 //! Rate limiting implementation for WiseGate.
 //!
-//! Provides per-IP rate limiting using a sliding window algorithm with
+//! Provides per-IP rate limiting using a sliding window log algorithm with
 //! automatic cleanup of expired entries to prevent memory exhaustion.
 //!
 //! # Algorithm
 //!
-//! Uses a simple sliding window approach:
-//! - Each IP has a counter and a timestamp of the last request
-//! - If the window has expired, the counter resets
-//! - If under the limit, the counter increments and the request is allowed
-//! - If over the limit, the request is denied
+//! Uses a sliding window log approach:
+//! - Each IP tracks individual request timestamps in a deque
+//! - On each check, expired timestamps (outside the window) are evicted
+//! - If the remaining count is under the limit, the request is allowed
+//! - This prevents the boundary-burst problem of fixed windows
 //!
 //! # Memory Management
 //!
@@ -107,9 +107,12 @@ pub async fn check_rate_limit(
 
         if should_cleanup {
             let before_count = rate_map.len();
-            // Remove entries that have expired (older than 2x window duration for safety margin)
-            let expiry_threshold = rate_config.window_duration * 2;
-            rate_map.retain(|_, entry| now.duration_since(entry.window_start) < expiry_threshold);
+            // Remove entries with no recent timestamps
+            rate_map.retain(|_, entry| {
+                entry
+                    .oldest()
+                    .is_some_and(|t| now.duration_since(t) < rate_config.window_duration * 2)
+            });
             let removed = before_count - rate_map.len();
             if removed > 0 {
                 debug!(
@@ -121,28 +124,27 @@ pub async fn check_rate_limit(
         }
     }
 
-    match rate_map.get_mut(ip) {
-        Some(entry) => {
-            // Check if we're in a new time window
-            if now.duration_since(entry.window_start) >= rate_config.window_duration {
-                // Reset window
-                entry.window_start = now;
-                entry.request_count = 1;
-                true
-            } else if entry.request_count < rate_config.max_requests {
-                // Within limit, increment counter
-                entry.request_count += 1;
-                true
-            } else {
-                // Rate limit exceeded
-                false
-            }
-        }
-        None => {
-            // First request from this IP
-            rate_map.insert(ip.to_string(), RateLimitEntry::new());
-            true
-        }
+    let entry = rate_map
+        .entry(ip.to_string())
+        .or_insert_with(|| RateLimitEntry {
+            timestamps: std::collections::VecDeque::new(),
+        });
+
+    // Evict timestamps outside the current window (true sliding window)
+    while entry
+        .timestamps
+        .front()
+        .is_some_and(|&t| now.duration_since(t) >= rate_config.window_duration)
+    {
+        entry.timestamps.pop_front();
+    }
+
+    if (entry.timestamps.len() as u32) < rate_config.max_requests {
+        entry.timestamps.push_back(now);
+        true
+    } else {
+        // Rate limit exceeded
+        false
     }
 }
 
@@ -219,7 +221,7 @@ mod tests {
         // Check the counter
         let inner = limiter.inner().lock().await;
         let entry = inner.get("192.168.1.1").unwrap();
-        assert_eq!(entry.request_count, 3);
+        assert_eq!(entry.request_count(), 3);
     }
 
     // ===========================================
@@ -263,7 +265,7 @@ mod tests {
         // Counter should not increase beyond limit
         let inner = limiter.inner().lock().await;
         let entry = inner.get("192.168.1.1").unwrap();
-        assert_eq!(entry.request_count, 1);
+        assert_eq!(entry.request_count(), 1);
     }
 
     // ===========================================
@@ -403,7 +405,7 @@ mod tests {
         // Verify counter is 3
         {
             let inner = limiter.inner().lock().await;
-            assert_eq!(inner.get("192.168.1.1").unwrap().request_count, 3);
+            assert_eq!(inner.get("192.168.1.1").unwrap().request_count(),3);
         }
 
         // Make 2 more requests (still within limit)
@@ -415,7 +417,7 @@ mod tests {
 
         // Counter should still be 5 (not increased when blocked)
         let inner = limiter.inner().lock().await;
-        assert_eq!(inner.get("192.168.1.1").unwrap().request_count, 5);
+        assert_eq!(inner.get("192.168.1.1").unwrap().request_count(),5);
     }
 
     #[tokio::test]
