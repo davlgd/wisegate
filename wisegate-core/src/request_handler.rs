@@ -405,30 +405,36 @@ fn is_url_pattern_blocked(path: &str, config: &impl ConfigProvider) -> bool {
 /// Properly handles multi-byte UTF-8 sequences.
 fn url_decode(input: &str) -> String {
     let mut bytes = Vec::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
+    let input_bytes = input.as_bytes();
+    let mut i = 0;
 
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            // Try to read two hex digits
-            let hex: String = chars.by_ref().take(2).collect();
-            if hex.len() == 2
-                && let Ok(byte) = u8::from_str_radix(&hex, 16)
-            {
-                bytes.push(byte);
+    while i < input_bytes.len() {
+        if input_bytes[i] == b'%' && i + 2 < input_bytes.len() {
+            // Try to decode two hex digits without allocating
+            let hi = hex_digit(input_bytes[i + 1]);
+            let lo = hex_digit(input_bytes[i + 2]);
+            if let (Some(h), Some(l)) = (hi, lo) {
+                bytes.push(h << 4 | l);
+                i += 3;
                 continue;
             }
-            // If decoding failed, keep original characters
-            bytes.extend_from_slice(b"%");
-            bytes.extend_from_slice(hex.as_bytes());
-        } else {
-            // Regular character - encode as UTF-8 bytes
-            let mut buf = [0u8; 4];
-            bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
         }
+        bytes.push(input_bytes[i]);
+        i += 1;
     }
 
     // Convert bytes to string, replacing invalid UTF-8 with replacement character
     String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// Converts an ASCII hex digit to its numeric value.
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 /// Check if HTTP method is blocked
