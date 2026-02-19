@@ -55,14 +55,6 @@ pub enum WiseGateError {
     #[error("HTTP method blocked: {0}")]
     MethodBlocked(String),
 
-    /// Authentication required but not provided.
-    #[error("Authentication required")]
-    AuthenticationRequired,
-
-    /// Invalid authentication credentials.
-    #[error("Invalid credentials")]
-    InvalidCredentials,
-
     /// Upstream connection failed.
     #[error("Upstream connection failed: {0}")]
     UpstreamConnectionFailed(String),
@@ -88,9 +80,6 @@ pub enum WiseGateError {
     #[error("HTTP client error: {0}")]
     HttpClientError(#[from] reqwest::Error),
 
-    /// Invalid HTTP header value.
-    #[error("Invalid header: {0}")]
-    InvalidHeader(String),
 }
 
 impl WiseGateError {
@@ -110,14 +99,11 @@ impl WiseGateError {
             Self::IpBlocked(_) => StatusCode::FORBIDDEN,
             Self::PatternBlocked(_) => StatusCode::NOT_FOUND,
             Self::MethodBlocked(_) => StatusCode::METHOD_NOT_ALLOWED,
-            Self::AuthenticationRequired => StatusCode::UNAUTHORIZED,
-            Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
             Self::UpstreamConnectionFailed(_) => StatusCode::BAD_GATEWAY,
             Self::UpstreamTimeout(_) => StatusCode::GATEWAY_TIMEOUT,
             Self::BodyTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
             Self::BodyReadError(_) => StatusCode::BAD_REQUEST,
             Self::HttpClientError(_) => StatusCode::BAD_GATEWAY,
-            Self::InvalidHeader(_) => StatusCode::BAD_REQUEST,
         }
     }
 
@@ -134,14 +120,11 @@ impl WiseGateError {
             Self::IpBlocked(_) => "Access denied",
             Self::PatternBlocked(_) => "Not found",
             Self::MethodBlocked(_) => "Method not allowed",
-            Self::AuthenticationRequired => "Unauthorized",
-            Self::InvalidCredentials => "Unauthorized",
             Self::UpstreamConnectionFailed(_) => "Service unavailable",
             Self::UpstreamTimeout(_) => "Gateway timeout",
             Self::BodyTooLarge { .. } => "Request body too large",
             Self::BodyReadError(_) => "Bad request",
             Self::HttpClientError(_) => "Bad gateway",
-            Self::InvalidHeader(_) => "Bad request",
         }
     }
 
