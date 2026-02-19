@@ -56,6 +56,8 @@ All configuration via environment variables:
 | `BLOCKED_PATTERNS` | - | Blocked URL patterns (returns 404) |
 | `RATE_LIMIT_REQUESTS` | `100` | Max requests per window |
 | `RATE_LIMIT_WINDOW_SECS` | `60` | Window duration in seconds |
+| `RATE_LIMIT_CLEANUP_THRESHOLD` | `10000` | Entries before auto-cleanup (0 = disabled) |
+| `RATE_LIMIT_CLEANUP_INTERVAL_SECS` | `60` | Min interval between cleanups in seconds |
 | `PROXY_TIMEOUT_SECS` | `30` | Upstream request timeout |
 | `MAX_BODY_SIZE_MB` | `100` | Max body size (0 = unlimited) |
 | `MAX_CONNECTIONS` | `10000` | Max concurrent connections (0 = unlimited) |

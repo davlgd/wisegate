@@ -60,7 +60,7 @@ pub const BLOCKED_METHODS: &str = "BLOCKED_METHODS";
 /// Comma-separated list of blocked URL patterns.
 ///
 /// Requests with URLs containing these patterns will receive a 404 Not Found response.
-/// Patterns are matched as substrings (case-sensitive).
+/// Patterns are matched as substrings (case-insensitive).
 ///
 /// **Example**: `".php,.yaml,/admin,wp-login"`
 pub const BLOCKED_PATTERNS: &str = "BLOCKED_PATTERNS";

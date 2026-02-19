@@ -70,9 +70,11 @@ pub struct ConnectionGuard {
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
-        let prev = self.active.fetch_update(Ordering::AcqRel, Ordering::Acquire, |val| {
-            Some(val.saturating_sub(1))
-        });
+        let prev = self
+            .active
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |val| {
+                Some(val.saturating_sub(1))
+            });
         debug_assert!(prev.is_ok_and(|v| v > 0), "Connection count underflow");
     }
 }

@@ -405,7 +405,7 @@ mod tests {
         // Verify counter is 3
         {
             let inner = limiter.inner().lock().await;
-            assert_eq!(inner.get("192.168.1.1").unwrap().request_count(),3);
+            assert_eq!(inner.get("192.168.1.1").unwrap().request_count(), 3);
         }
 
         // Make 2 more requests (still within limit)
@@ -417,7 +417,7 @@ mod tests {
 
         // Counter should still be 5 (not increased when blocked)
         let inner = limiter.inner().lock().await;
-        assert_eq!(inner.get("192.168.1.1").unwrap().request_count(),5);
+        assert_eq!(inner.get("192.168.1.1").unwrap().request_count(), 5);
     }
 
     #[tokio::test]
