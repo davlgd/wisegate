@@ -109,6 +109,9 @@ async fn main() {
 
     info!(port = args.listen, bind = %args.bind, "WiseGate is running");
 
+    // Share forward host as Arc<str> to avoid cloning String per connection
+    let forward_host: Arc<str> = Arc::from(args.bind.as_str());
+
     // Track active connections for graceful shutdown
     let connection_tracker = ConnectionTracker::new();
 
@@ -143,7 +146,7 @@ async fn main() {
 
                 let io = TokioIo::new(stream);
                 let limiter = rate_limiter.clone();
-                let forward_host = args.bind.clone();
+                let forward_host = forward_host.clone();
                 let forward_port = args.forward;
                 let tracker = connection_tracker.clone();
                 let config = env_config.clone();

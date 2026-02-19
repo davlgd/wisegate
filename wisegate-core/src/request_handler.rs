@@ -58,7 +58,7 @@ use crate::{auth, headers, ip_filter, rate_limiter};
 /// without valid proxy headers are rejected with 403 Forbidden.
 pub async fn handle_request<C: ConfigProvider>(
     req: Request<Incoming>,
-    forward_host: String,
+    forward_host: Arc<str>,
     forward_port: u16,
     limiter: RateLimiter,
     config: Arc<C>,
