@@ -367,11 +367,13 @@ pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full
 ///
 /// An HTTP 401 response with `WWW-Authenticate: Basic realm="..."` header.
 pub fn create_unauthorized_response(realm: &str) -> Response<Full<bytes::Bytes>> {
+    // Sanitize realm: escape backslashes and quotes per RFC 7235 quoted-string
+    let sanitized_realm = realm.replace('\\', "\\\\").replace('"', "\\\"");
     Response::builder()
         .status(StatusCode::UNAUTHORIZED)
         .header(
             headers::WWW_AUTHENTICATE,
-            format!("Basic realm=\"{}\"", realm),
+            format!("Basic realm=\"{}\"", sanitized_realm),
         )
         .header("content-type", "text/plain")
         .body(Full::new(bytes::Bytes::from("401 Unauthorized")))
