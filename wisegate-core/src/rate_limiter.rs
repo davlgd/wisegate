@@ -85,12 +85,12 @@ pub async fn check_rate_limit(
 ) -> bool {
     let rate_config = config.rate_limit_config();
     let cleanup_config = config.rate_limit_cleanup_config();
-    let mut rate_map = limiter.inner().lock().await;
     let now = Instant::now();
 
-    // Perform cleanup if needed (threshold exceeded and interval passed)
-    if cleanup_config.is_enabled() && rate_map.len() > cleanup_config.threshold {
-        let should_cleanup = {
+    // Check cleanup eligibility before locking rate_map to avoid nested locks
+    let needs_cleanup = if cleanup_config.is_enabled() {
+        let entry_count = limiter.inner().lock().await.len();
+        if entry_count > cleanup_config.threshold {
             let mut last_cleanup = limiter.last_cleanup().lock().await;
             match *last_cleanup {
                 None => {
@@ -103,24 +103,30 @@ pub async fn check_rate_limit(
                 }
                 _ => false,
             }
-        };
+        } else {
+            false
+        }
+    } else {
+        false
+    };
 
-        if should_cleanup {
-            let before_count = rate_map.len();
-            // Remove entries with no recent timestamps
-            rate_map.retain(|_, entry| {
-                entry
-                    .oldest()
-                    .is_some_and(|t| now.duration_since(t) < rate_config.window_duration * 2)
-            });
-            let removed = before_count - rate_map.len();
-            if removed > 0 {
-                debug!(
-                    removed_entries = removed,
-                    remaining_entries = rate_map.len(),
-                    "Rate limiter cleanup completed"
-                );
-            }
+    let mut rate_map = limiter.inner().lock().await;
+
+    if needs_cleanup {
+        let before_count = rate_map.len();
+        // Remove entries with no recent timestamps
+        rate_map.retain(|_, entry| {
+            entry
+                .oldest()
+                .is_some_and(|t| now.duration_since(t) < rate_config.window_duration * 2)
+        });
+        let removed = before_count - rate_map.len();
+        if removed > 0 {
+            debug!(
+                removed_entries = removed,
+                remaining_entries = rate_map.len(),
+                "Rate limiter cleanup completed"
+            );
         }
     }
 
