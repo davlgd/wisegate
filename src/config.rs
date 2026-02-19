@@ -407,9 +407,15 @@ pub fn get_blocked_patterns() -> &'static Vec<String> {
 }
 
 /// Computes blocked URL patterns from environment variable.
+/// Patterns are pre-normalized to lowercase for case-insensitive matching.
 fn compute_blocked_patterns() -> Vec<String> {
     env::var(env_vars::BLOCKED_PATTERNS)
-        .map(|s| parse_comma_separated(&s))
+        .map(|s| {
+            s.split(',')
+                .map(|p| p.trim().to_lowercase())
+                .filter(|p| !p.is_empty())
+                .collect()
+        })
         .unwrap_or_default()
 }
 

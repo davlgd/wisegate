@@ -391,12 +391,12 @@ fn is_url_pattern_blocked(path: &str, config: &impl ConfigProvider) -> bool {
         None
     };
 
+    // Patterns are expected to be pre-normalized to lowercase
     blocked_patterns.iter().any(|pattern| {
-        let pat = pattern.to_lowercase();
-        path_lower.contains(&pat)
+        path_lower.contains(pattern.as_str())
             || decoded_lower
                 .as_ref()
-                .is_some_and(|dl| dl.contains(&pat))
+                .is_some_and(|dl| dl.contains(pattern.as_str()))
     })
 }
 
