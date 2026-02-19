@@ -219,26 +219,16 @@ async fn forward_with_reqwest(
         parts.uri.path_and_query().map_or("", |pq| pq.as_str())
     );
 
-    // Build the request with method support for all HTTP verbs
-    let mut req_builder = match parts.method.as_str() {
-        "GET" => client.get(&destination_uri),
-        "POST" => client.post(&destination_uri),
-        "PUT" => client.put(&destination_uri),
-        "DELETE" => client.delete(&destination_uri),
-        "HEAD" => client.head(&destination_uri),
-        "PATCH" => client.patch(&destination_uri),
-        "OPTIONS" => client.request(reqwest::Method::OPTIONS, &destination_uri),
-        method => {
-            // Try to parse custom methods
-            match reqwest::Method::from_bytes(method.as_bytes()) {
-                Ok(custom_method) => client.request(custom_method, &destination_uri),
-                Err(_) => {
-                    let err = WiseGateError::MethodBlocked(format!("{} (unsupported)", method));
-                    return Ok(create_error_response(err.status_code(), err.user_message()));
-                }
-            }
+    // Build the request with the original HTTP method
+    let method = match reqwest::Method::from_bytes(parts.method.as_str().as_bytes()) {
+        Ok(m) => m,
+        Err(_) => {
+            let err =
+                WiseGateError::MethodBlocked(format!("{} (unsupported)", parts.method.as_str()));
+            return Ok(create_error_response(err.status_code(), err.user_message()));
         }
     };
+    let mut req_builder = client.request(method, &destination_uri);
 
     // Add headers (excluding host, content-length, and hop-by-hop headers per RFC 7230)
     for (name, value) in parts.headers.iter() {
