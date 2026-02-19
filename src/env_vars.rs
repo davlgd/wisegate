@@ -27,7 +27,7 @@
 /// When set, enables strict mode with header validation.
 /// Requests must come from these IPs to be accepted.
 ///
-/// **Example**: `"192.168.1.1,10.0.0.1,172.16.0.0/24"`
+/// **Example**: `"192.168.1.1,10.0.0.1"`
 pub const ALLOWED_PROXY_IPS: &str = "CC_REVERSE_PROXY_IPS";
 
 /// Alternative environment variable name for trusted proxy IPs.
