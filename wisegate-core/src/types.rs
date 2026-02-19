@@ -350,10 +350,18 @@ impl Default for RateLimitEntry {
     }
 }
 
+/// Internal state for the rate limiter, held behind a single Mutex.
+pub(crate) struct RateLimiterState {
+    /// Per-IP rate limit entries.
+    pub(crate) entries: HashMap<String, RateLimitEntry>,
+    /// Timestamp of the last cleanup operation.
+    pub(crate) last_cleanup: Option<Instant>,
+}
+
 /// Thread-safe rate limiter state shared across all connections.
 ///
 /// Wraps a HashMap mapping IP addresses to their rate limit entries,
-/// along with per-instance cleanup tracking state.
+/// along with cleanup tracking state, behind a single Mutex.
 /// Uses `tokio::sync::Mutex` for async-friendly locking that won't block
 /// the Tokio thread pool.
 ///
@@ -366,37 +374,33 @@ impl Default for RateLimitEntry {
 /// ```
 #[derive(Clone)]
 pub struct RateLimiter {
-    inner: Arc<Mutex<HashMap<String, RateLimitEntry>>>,
-    last_cleanup: Arc<Mutex<Option<Instant>>>,
+    state: Arc<Mutex<RateLimiterState>>,
 }
 
 impl RateLimiter {
     /// Creates a new empty rate limiter.
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(HashMap::new())),
-            last_cleanup: Arc::new(Mutex::const_new(None)),
+            state: Arc::new(Mutex::new(RateLimiterState {
+                entries: HashMap::new(),
+                last_cleanup: None,
+            })),
         }
     }
 
-    /// Returns a reference to the inner mutex-protected map.
-    pub(crate) fn inner(&self) -> &Arc<Mutex<HashMap<String, RateLimitEntry>>> {
-        &self.inner
-    }
-
-    /// Returns a reference to the last cleanup timestamp.
-    pub(crate) fn last_cleanup(&self) -> &Arc<Mutex<Option<Instant>>> {
-        &self.last_cleanup
+    /// Returns a reference to the mutex-protected state.
+    pub(crate) fn state(&self) -> &Arc<Mutex<RateLimiterState>> {
+        &self.state
     }
 
     /// Returns the number of tracked IPs.
     pub async fn entry_count(&self) -> usize {
-        self.inner.lock().await.len()
+        self.state.lock().await.entries.len()
     }
 
     /// Returns true if no IPs are being tracked.
     pub async fn is_empty(&self) -> bool {
-        self.inner.lock().await.is_empty()
+        self.state.lock().await.entries.is_empty()
     }
 }
 
@@ -572,28 +576,30 @@ mod tests {
     #[tokio::test]
     async fn test_rate_limiter_new_is_empty() {
         let limiter = RateLimiter::new();
-        let inner = limiter.inner().lock().await;
-        assert!(inner.is_empty());
+        let state = limiter.state().lock().await;
+        assert!(state.entries.is_empty());
     }
 
     #[tokio::test]
     async fn test_rate_limiter_default_is_empty() {
         let limiter = RateLimiter::default();
-        let inner = limiter.inner().lock().await;
-        assert!(inner.is_empty());
+        let state = limiter.state().lock().await;
+        assert!(state.entries.is_empty());
     }
 
     #[tokio::test]
     async fn test_rate_limiter_can_insert_and_retrieve() {
         let limiter = RateLimiter::new();
         {
-            let mut inner = limiter.inner().lock().await;
-            inner.insert("192.168.1.1".to_string(), RateLimitEntry::new());
+            let mut state = limiter.state().lock().await;
+            state
+                .entries
+                .insert("192.168.1.1".to_string(), RateLimitEntry::new());
         }
         {
-            let inner = limiter.inner().lock().await;
-            assert!(inner.contains_key("192.168.1.1"));
-            assert_eq!(inner.len(), 1);
+            let state = limiter.state().lock().await;
+            assert!(state.entries.contains_key("192.168.1.1"));
+            assert_eq!(state.entries.len(), 1);
         }
     }
 
@@ -601,7 +607,7 @@ mod tests {
     fn test_rate_limiter_clone() {
         let limiter1 = RateLimiter::new();
         let limiter2 = limiter1.clone();
-        // Both should point to the same inner Arc
-        assert!(Arc::ptr_eq(limiter1.inner(), limiter2.inner()));
+        // Both should point to the same state Arc
+        assert!(Arc::ptr_eq(limiter1.state(), limiter2.state()));
     }
 }

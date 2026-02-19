@@ -87,50 +87,35 @@ pub async fn check_rate_limit(
     let cleanup_config = config.rate_limit_cleanup_config();
     let now = Instant::now();
 
-    // Check cleanup eligibility before locking rate_map to avoid nested locks
-    let needs_cleanup = if cleanup_config.is_enabled() {
-        let entry_count = limiter.inner().lock().await.len();
-        if entry_count > cleanup_config.threshold {
-            let mut last_cleanup = limiter.last_cleanup().lock().await;
-            match *last_cleanup {
-                None => {
-                    *last_cleanup = Some(now);
-                    true
-                }
-                Some(last) if now.duration_since(last) >= cleanup_config.interval => {
-                    *last_cleanup = Some(now);
-                    true
-                }
-                _ => false,
+    let mut state = limiter.state().lock().await;
+
+    // Cleanup expired entries if threshold exceeded and interval elapsed
+    if cleanup_config.is_enabled() && state.entries.len() > cleanup_config.threshold {
+        let should_cleanup = match state.last_cleanup {
+            None => true,
+            Some(last) => now.duration_since(last) >= cleanup_config.interval,
+        };
+        if should_cleanup {
+            state.last_cleanup = Some(now);
+            let before_count = state.entries.len();
+            state.entries.retain(|_, entry| {
+                entry
+                    .oldest()
+                    .is_some_and(|t| now.duration_since(t) < rate_config.window_duration * 2)
+            });
+            let removed = before_count - state.entries.len();
+            if removed > 0 {
+                debug!(
+                    removed_entries = removed,
+                    remaining_entries = state.entries.len(),
+                    "Rate limiter cleanup completed"
+                );
             }
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    let mut rate_map = limiter.inner().lock().await;
-
-    if needs_cleanup {
-        let before_count = rate_map.len();
-        // Remove entries with no recent timestamps
-        rate_map.retain(|_, entry| {
-            entry
-                .oldest()
-                .is_some_and(|t| now.duration_since(t) < rate_config.window_duration * 2)
-        });
-        let removed = before_count - rate_map.len();
-        if removed > 0 {
-            debug!(
-                removed_entries = removed,
-                remaining_entries = rate_map.len(),
-                "Rate limiter cleanup completed"
-            );
         }
     }
 
-    let entry = rate_map
+    let entry = state
+        .entries
         .entry(ip.to_string())
         .or_insert_with(|| RateLimitEntry {
             timestamps: std::collections::VecDeque::new(),
@@ -225,8 +210,8 @@ mod tests {
         check_rate_limit(&limiter, "192.168.1.1", &config).await;
 
         // Check the counter
-        let inner = limiter.inner().lock().await;
-        let entry = inner.get("192.168.1.1").unwrap();
+        let state = limiter.state().lock().await;
+        let entry = state.entries.get("192.168.1.1").unwrap();
         assert_eq!(entry.request_count(), 3);
     }
 
@@ -269,8 +254,8 @@ mod tests {
         }
 
         // Counter should not increase beyond limit
-        let inner = limiter.inner().lock().await;
-        let entry = inner.get("192.168.1.1").unwrap();
+        let state = limiter.state().lock().await;
+        let entry = state.entries.get("192.168.1.1").unwrap();
         assert_eq!(entry.request_count(), 1);
     }
 
@@ -309,8 +294,8 @@ mod tests {
         }
 
         // All entries should remain (no cleanup)
-        let inner = limiter.inner().lock().await;
-        assert_eq!(inner.len(), 100);
+        let state = limiter.state().lock().await;
+        assert_eq!(state.entries.len(), 100);
     }
 
     #[tokio::test]
@@ -323,8 +308,8 @@ mod tests {
             check_rate_limit(&limiter, &format!("10.0.0.{}", i), &config).await;
         }
 
-        let inner = limiter.inner().lock().await;
-        assert_eq!(inner.len(), 5);
+        let state = limiter.state().lock().await;
+        assert_eq!(state.entries.len(), 5);
     }
 
     // ===========================================
@@ -410,8 +395,8 @@ mod tests {
 
         // Verify counter is 3
         {
-            let inner = limiter.inner().lock().await;
-            assert_eq!(inner.get("192.168.1.1").unwrap().request_count(), 3);
+            let state = limiter.state().lock().await;
+            assert_eq!(state.entries.get("192.168.1.1").unwrap().request_count(), 3);
         }
 
         // Make 2 more requests (still within limit)
@@ -422,8 +407,8 @@ mod tests {
         assert!(!check_rate_limit(&limiter, "192.168.1.1", &config).await);
 
         // Counter should still be 5 (not increased when blocked)
-        let inner = limiter.inner().lock().await;
-        assert_eq!(inner.get("192.168.1.1").unwrap().request_count(), 5);
+        let state = limiter.state().lock().await;
+        assert_eq!(state.entries.get("192.168.1.1").unwrap().request_count(), 5);
     }
 
     #[tokio::test]
@@ -462,11 +447,11 @@ mod tests {
         assert!(check_rate_limit(&limiter, "192.168.1.1", &config).await);
 
         // IP2 still within its window, should have 1 request counted
-        let inner = limiter.inner().lock().await;
+        let state = limiter.state().lock().await;
         // IP2 might have had its window expire too, depends on timing
         // Just verify both IPs are tracked
-        assert!(inner.contains_key("192.168.1.1"));
-        assert!(inner.contains_key("192.168.1.2"));
+        assert!(state.entries.contains_key("192.168.1.1"));
+        assert!(state.entries.contains_key("192.168.1.2"));
     }
 
     // ===========================================
@@ -505,10 +490,10 @@ mod tests {
         check_rate_limit(&limiter, "192.168.1.3", &config).await;
 
         // Only recent entries should remain (older ones cleaned up)
-        let inner = limiter.inner().lock().await;
+        let state = limiter.state().lock().await;
         // Due to timing, we can't predict exactly which entries remain
         // but we can verify cleanup mechanism works by checking count is <= 3
-        assert!(inner.len() <= 3);
+        assert!(state.entries.len() <= 3);
     }
 
     // ===========================================
@@ -572,7 +557,7 @@ mod tests {
         assert!(results.iter().all(|&r| r));
 
         // Verify all IPs are tracked
-        let inner = limiter.inner().lock().await;
-        assert_eq!(inner.len(), 50);
+        let state = limiter.state().lock().await;
+        assert_eq!(state.entries.len(), 50);
     }
 }
