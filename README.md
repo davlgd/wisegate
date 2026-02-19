@@ -190,7 +190,7 @@ WiseGate's core functionality is available as a separate crate `wisegate-core` f
 
 ```toml
 [dependencies]
-wisegate-core = "0.10"
+wisegate-core = "0.11"
 ```
 
 ```rust

@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-02-19
+
+### Added
+- **Sliding window log algorithm**: True sliding window rate limiting replacing the fixed window approach
+
+### Fixed
+- **Content-Length pre-check**: Check body size before buffering to prevent memory exhaustion
+- **Hop-by-hop header filtering**: Filter on request path per RFC 7230
+- **URL pattern bypass**: Case-insensitive URL pattern blocking to prevent bypass
+- **Bearer token prefix**: Case-insensitive `Bearer` prefix per RFC 6750
+- **WWW-Authenticate header**: Sanitize realm value to prevent header injection
+- **Credential masking**: Mask auth credentials and tokens in verbose log output
+
+### Performance
+- **Zero-copy body forwarding**: Pass `Bytes` directly to reqwest body instead of `to_vec()`
+- **Hop-by-hop comparison**: Case-insensitive comparison without allocation
+- **Method/pattern filtering**: Reduce allocations in method and URL pattern filtering
+- **url_decode**: Byte-based iteration avoiding String allocation per hex pair
+- **Blocked patterns**: Pre-normalize to lowercase at config load time
+- **forward_host**: Use `Arc<str>` to avoid per-connection `String::clone`
+
+### Refactored
+- **RateLimiter**: Unified state into single `Mutex`, encapsulated internals, moved cleanup state per-instance
+- **Client IP**: Replace sentinel string with `Option<String>`
+- **ConnectionGuard**: RAII guard with saturating decrement
+- **Config caching**: Replace `once_cell::Lazy` with `std::sync::LazyLock`
+- **ConfigProvider**: Use trait consistently instead of standalone getters
+- **Header constants**: Use constants instead of magic strings in IP filter and request handler
+- **Test infrastructure**: Merge `AuthTestEnvironment` into `TestEnvironment` with builder pattern
+- **Error types**: Remove unused error variants
+- **Defaults**: Remove redundant constant aliases, use defaults module directly
+- **Method matching**: Simplify HTTP method matching in request forwarding
+- **Rate limiter locking**: Eliminate nested locking in cleanup path
+- **Dead code cleanup**: Remove unused `Result` type alias, builder methods, and consolidate redundant tests
+- **Clippy warnings**: Fix `collapsible_if`, `expect_fun_call`, and `manual_contains` in integration tests
+
+### Documentation
+- Fix request flow order in README to match implementation
+- Fix library examples, document `TRUSTED_PROXY_IPS_VAR` whitelist
+- Remove unsupported CIDR notation from proxy IPs example
+
+---
+
 ## [0.10.0] - 2026-01-17
 
 ### Added
