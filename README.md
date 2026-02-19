@@ -159,11 +159,10 @@ curl -H "Authorization: Bearer my-api-key" http://localhost:8080/
 Client → Load Balancer → 🧙‍♂️ WiseGate → Your Service
                               │
                               ├─ 🔒 Check connection limit
-                              ├─ 🔍 Validate proxy headers (strict)
-                              ├─ ⚔️ Check HTTP method
-                              ├─ 🗺️ Check URL patterns
-                              ├─ 👁️ Extract client IP
+                              ├─ 🔍 Validate proxy headers + Extract client IP
                               ├─ 🚫 Check IP blocklist
+                              ├─ 🗺️ Check URL patterns
+                              ├─ ⚔️ Check HTTP method
                               ├─ 🔑 Verify Authentication (if enabled)
                               ├─ ⏱️ Apply rate limiting
                               └─ 📋 Forward with X-Real-IP
