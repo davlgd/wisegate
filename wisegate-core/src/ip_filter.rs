@@ -33,6 +33,7 @@
 //! }
 //! ```
 
+use crate::headers;
 use crate::types::ConfigProvider;
 
 /// Checks if an IP address is in the blocked list.
@@ -99,8 +100,8 @@ pub fn extract_and_validate_real_ip(
 
     if has_proxy_allowlist {
         // Strict mode: require both headers and validate proxy IP
-        let xff = headers.get("x-forwarded-for")?.to_str().ok()?;
-        let forwarded = headers.get("forwarded")?.to_str().ok()?;
+        let xff = headers.get(headers::X_FORWARDED_FOR)?.to_str().ok()?;
+        let forwarded = headers.get(headers::FORWARDED)?.to_str().ok()?;
         let proxy_ip = extract_proxy_ip_from_forwarded(forwarded)?;
 
         if !is_proxy_ip_allowed(&proxy_ip, allowed_proxy_ips) {
@@ -110,14 +111,14 @@ pub fn extract_and_validate_real_ip(
         extract_client_ip_from_xff(xff)
     } else {
         // Permissive mode: try to extract client IP from available headers
-        if let Some(xff) = headers.get("x-forwarded-for").and_then(|h| h.to_str().ok()) {
+        if let Some(xff) = headers.get(headers::X_FORWARDED_FOR).and_then(|h| h.to_str().ok()) {
             // If we have x-forwarded-for, try to extract client IP from it
             if let Some(client_ip) = extract_client_ip_from_xff(xff) {
                 return Some(client_ip);
             }
         }
 
-        if let Some(forwarded) = headers.get("forwarded").and_then(|h| h.to_str().ok()) {
+        if let Some(forwarded) = headers.get(headers::FORWARDED).and_then(|h| h.to_str().ok()) {
             // If we have forwarded header, try to extract client IP
             if let Some(client_ip) = extract_client_ip_from_forwarded(forwarded) {
                 return Some(client_ip);
