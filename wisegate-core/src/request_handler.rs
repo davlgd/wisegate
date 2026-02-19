@@ -137,7 +137,7 @@ pub async fn handle_request<C: ConfigProvider>(
     if let Some(ref ip) = real_client_ip
         && let Ok(header_value) = ip.parse()
     {
-        req.headers_mut().insert("x-real-ip", header_value);
+        req.headers_mut().insert(headers::X_REAL_IP, header_value);
     }
 
     // Forward the request
@@ -166,7 +166,7 @@ async fn forward_request(
     if proxy_config.max_body_size > 0
         && let Some(content_length) = parts
             .headers
-            .get("content-length")
+            .get(headers::CONTENT_LENGTH)
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse::<usize>().ok())
         && content_length > proxy_config.max_body_size
@@ -232,8 +232,8 @@ async fn forward_with_reqwest(
 
     // Add headers (excluding host, content-length, and hop-by-hop headers per RFC 7230)
     for (name, value) in parts.headers.iter() {
-        if name != "host"
-            && name != "content-length"
+        if name != headers::HOST
+            && name != headers::CONTENT_LENGTH
             && !headers::is_hop_by_hop(name.as_str())
             && let Ok(header_value) = value.to_str()
         {
@@ -336,7 +336,7 @@ async fn forward_with_reqwest(
 pub fn create_error_response(status: StatusCode, message: &str) -> Response<Full<bytes::Bytes>> {
     Response::builder()
         .status(status)
-        .header("content-type", "text/plain")
+        .header(headers::CONTENT_TYPE, "text/plain")
         .body(Full::new(bytes::Bytes::from(message.to_string())))
         .unwrap_or_else(|_| {
             // Fallback response if builder fails (extremely unlikely)
@@ -365,7 +365,7 @@ pub fn create_unauthorized_response(realm: &str) -> Response<Full<bytes::Bytes>>
             headers::WWW_AUTHENTICATE,
             format!("Basic realm=\"{}\"", sanitized_realm),
         )
-        .header("content-type", "text/plain")
+        .header(headers::CONTENT_TYPE, "text/plain")
         .body(Full::new(bytes::Bytes::from("401 Unauthorized")))
         .unwrap_or_else(|_| Response::new(Full::new(bytes::Bytes::from("401 Unauthorized"))))
 }
