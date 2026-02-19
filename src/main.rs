@@ -13,12 +13,12 @@ use tokio::net::TcpListener;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use wisegate::RateLimiter;
+use wisegate::{ConnectionProvider, ProxyProvider, RateLimiter};
 use wisegate::args::Args;
 use wisegate::config::EnvVarConfig;
 use wisegate::connection::{ConnectionLimiter, ConnectionTracker};
 use wisegate::server::StartupConfig;
-use wisegate::{config, request_handler, server};
+use wisegate::{request_handler, server};
 
 /// Graceful shutdown timeout in seconds
 const SHUTDOWN_TIMEOUT_SECS: u64 = 30;
@@ -64,6 +64,10 @@ async fn main() {
     // Initialize tracing before any logging
     init_tracing(args.verbose, args.quiet, args.json_logs);
 
+    // Initialize rate limiter and config provider
+    let rate_limiter = RateLimiter::new();
+    let env_config = Arc::new(EnvVarConfig::new());
+
     let startup_config = StartupConfig {
         listen_port: args.listen,
         forward_port: args.forward,
@@ -71,16 +75,11 @@ async fn main() {
         verbose: args.verbose,
         quiet: args.quiet,
     };
-    server::print_startup_info(&startup_config);
-
-    // Initialize rate limiter and config provider
-    let rate_limiter = RateLimiter::new();
-    let env_config = Arc::new(EnvVarConfig::new());
+    server::print_startup_info(&startup_config, &*env_config);
 
     // Create HTTP client for connection pooling
-    let proxy_config = config::get_proxy_config();
     let http_client = reqwest::Client::builder()
-        .timeout(proxy_config.timeout)
+        .timeout(env_config.proxy_config().timeout)
         .pool_max_idle_per_host(32)
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
@@ -96,7 +95,7 @@ async fn main() {
     };
 
     // Create connection limiter (0 = unlimited)
-    let max_connections = config::get_max_connections();
+    let max_connections = env_config.max_connections();
     let connection_limiter = ConnectionLimiter::new(max_connections);
     if connection_limiter.is_enabled() {
         info!(

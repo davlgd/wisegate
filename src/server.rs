@@ -3,9 +3,10 @@
 //! This module handles the startup banner and configuration display
 //! for the WiseGate reverse proxy.
 
-use crate::{config, env_vars};
+use crate::env_vars;
 use std::env;
 use tracing::{debug, info};
+use wisegate_core::ConfigProvider;
 
 /// Configuration for startup display.
 ///
@@ -37,33 +38,33 @@ pub struct StartupConfig {
 ///
 /// # Arguments
 ///
-/// * `config` - The startup configuration
+/// * `startup_config` - The startup display configuration
+/// * `config` - Configuration provider for all settings
 ///
 /// # Example
 ///
 /// ```no_run
 /// use wisegate::server::{print_startup_info, StartupConfig};
+/// use wisegate::config::EnvVarConfig;
 ///
-/// let config = StartupConfig {
+/// let startup = StartupConfig {
 ///     listen_port: 8080,
 ///     forward_port: 9000,
 ///     bind_address: "0.0.0.0".to_string(),
 ///     verbose: false,
 ///     quiet: false,
 /// };
-/// print_startup_info(&config);
+/// let config = EnvVarConfig::new();
+/// print_startup_info(&startup, &config);
 /// ```
-pub fn print_startup_info(startup_config: &StartupConfig) {
+pub fn print_startup_info(startup_config: &StartupConfig, config: &impl ConfigProvider) {
     if startup_config.quiet {
         return;
     }
 
-    let rate_config = config::get_rate_limit_config();
-    let proxy_config = config::get_proxy_config();
-    let allowed_proxy_ips = config::get_allowed_proxy_ips();
-    let blocked_ips = config::get_blocked_ips();
-    let blocked_methods = config::get_blocked_methods();
-    let blocked_patterns = config::get_blocked_patterns();
+    let rate_config = config.rate_limit_config();
+    let proxy_config = config.proxy_config();
+    let allowed_proxy_ips = config.allowed_proxy_ips();
 
     info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -95,23 +96,22 @@ pub fn print_startup_info(startup_config: &StartupConfig) {
     info!(
         mode = mode,
         trusted_proxies = trusted_proxies,
-        blocked_ips = blocked_ips.len(),
-        blocked_methods = blocked_methods.len(),
-        blocked_patterns = blocked_patterns.len(),
+        blocked_ips = config.blocked_ips().len(),
+        blocked_methods = config.blocked_methods().len(),
+        blocked_patterns = config.blocked_patterns().len(),
         "Security configured"
     );
 
     // Display authentication status
-    let auth_credentials = config::get_auth_credentials();
-    let basic_auth_enabled = !auth_credentials.is_empty();
-    let bearer_auth_enabled = config::get_bearer_token().is_some();
+    let basic_auth_enabled = config.is_basic_auth_enabled();
+    let bearer_auth_enabled = config.is_bearer_auth_enabled();
 
     if basic_auth_enabled || bearer_auth_enabled {
         info!(
             basic_auth = basic_auth_enabled,
-            basic_auth_users = auth_credentials.len(),
+            basic_auth_users = config.auth_credentials().len(),
             bearer_token = bearer_auth_enabled,
-            realm = config::get_auth_realm(),
+            realm = config.auth_realm(),
             "Authentication configured"
         );
     } else {
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_print_startup_info_quiet_mode() {
-        // In quiet mode, nothing should be printed (no panic)
+        let env_config = crate::config::EnvVarConfig::new();
         let config = StartupConfig {
             listen_port: 8080,
             forward_port: 9000,
@@ -300,12 +300,12 @@ mod tests {
         };
 
         // Should not panic
-        print_startup_info(&config);
+        print_startup_info(&config, &env_config);
     }
 
     #[test]
     fn test_print_startup_info_normal_mode() {
-        // Normal mode should work without panic
+        let env_config = crate::config::EnvVarConfig::new();
         let config = StartupConfig {
             listen_port: 8080,
             forward_port: 9000,
@@ -315,12 +315,12 @@ mod tests {
         };
 
         // Should not panic
-        print_startup_info(&config);
+        print_startup_info(&config, &env_config);
     }
 
     #[test]
     fn test_print_startup_info_verbose_mode() {
-        // Verbose mode should work without panic
+        let env_config = crate::config::EnvVarConfig::new();
         let config = StartupConfig {
             listen_port: 8080,
             forward_port: 9000,
@@ -330,11 +330,12 @@ mod tests {
         };
 
         // Should not panic
-        print_startup_info(&config);
+        print_startup_info(&config, &env_config);
     }
 
     #[test]
     fn test_print_startup_info_ipv6_bind() {
+        let env_config = crate::config::EnvVarConfig::new();
         let config = StartupConfig {
             listen_port: 8080,
             forward_port: 9000,
@@ -344,6 +345,6 @@ mod tests {
         };
 
         // Should not panic with IPv6 address
-        print_startup_info(&config);
+        print_startup_info(&config, &env_config);
     }
 }
