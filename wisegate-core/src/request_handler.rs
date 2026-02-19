@@ -390,14 +390,23 @@ fn is_url_pattern_blocked(path: &str, config: &impl ConfigProvider) -> bool {
 
     // Decode URL-encoded path to prevent bypass attacks
     let decoded_path = url_decode(path);
+    let has_encoding = decoded_path != path;
 
     // Case-insensitive matching to prevent bypass via case variation
     let path_lower = path.to_lowercase();
-    let decoded_lower = decoded_path.to_lowercase();
+    // Only allocate decoded lowercase if URL actually contained percent-encoding
+    let decoded_lower = if has_encoding {
+        Some(decoded_path.to_lowercase())
+    } else {
+        None
+    };
 
     blocked_patterns.iter().any(|pattern| {
-        let pattern_lower = pattern.to_lowercase();
-        path_lower.contains(&pattern_lower) || decoded_lower.contains(&pattern_lower)
+        let pat = pattern.to_lowercase();
+        path_lower.contains(&pat)
+            || decoded_lower
+                .as_ref()
+                .is_some_and(|dl| dl.contains(&pat))
     })
 }
 
@@ -437,7 +446,7 @@ fn is_method_blocked(method: &str, config: &impl ConfigProvider) -> bool {
     let blocked_methods = config.blocked_methods();
     blocked_methods
         .iter()
-        .any(|blocked_method| blocked_method == &method.to_uppercase())
+        .any(|blocked_method| blocked_method.eq_ignore_ascii_case(method))
 }
 
 #[cfg(test)]
