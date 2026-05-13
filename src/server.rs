@@ -5,7 +5,7 @@
 
 use crate::env_vars;
 use std::env;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use wisegate_core::ConfigProvider;
 
 /// Configuration for startup display.
@@ -118,9 +118,40 @@ pub fn print_startup_info(startup_config: &StartupConfig, config: &impl ConfigPr
         debug!("Authentication disabled (no credentials or bearer token configured)");
     }
 
+    warn_on_suspicious_config(startup_config, config);
+
     // Show environment configuration in verbose mode
     if startup_config.verbose {
         print_env_config();
+    }
+}
+
+/// Warns at startup when the configuration looks like a common misconfiguration.
+///
+/// These are surfaced even in non-verbose mode (but not in quiet mode) because
+/// they often produce silent "all requests are 400" symptoms that beginners
+/// struggle to diagnose.
+fn warn_on_suspicious_config(startup_config: &StartupConfig, config: &impl ConfigProvider) {
+    if let Some(proxy_ips) = config.allowed_proxy_ips() {
+        // 0.0.0.0 is a bind-only sentinel — it never appears in a Forwarded `by=` field.
+        if proxy_ips.iter().any(|ip| ip == "0.0.0.0") {
+            warn!(
+                "CC_REVERSE_PROXY_IPS contains 0.0.0.0 — this is the bind sentinel, \
+                 not a real proxy IP. Strict mode will reject every request."
+            );
+        }
+        // Listening on a public interface with strict mode but no auth is OK,
+        // but listening on a public interface with NO proxy IPs and NO auth
+        // exposes the upstream to anyone who can reach the port.
+    } else if startup_config.bind_address == "0.0.0.0"
+        && !config.is_auth_enabled()
+        && config.blocked_ips().is_empty()
+    {
+        warn!(
+            "Listening on 0.0.0.0 in permissive mode with no authentication and no IP \
+             blocklist — this proxy is openly reachable. Set CC_REVERSE_PROXY_IPS, \
+             CC_HTTP_BASIC_AUTH, or BLOCKED_IPS, or bind to 127.0.0.1 for local testing."
+        );
     }
 }
 
