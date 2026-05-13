@@ -64,7 +64,17 @@ pub fn is_ip_blocked(ip: &str, config: &impl ConfigProvider) -> bool {
     config
         .blocked_ips()
         .iter()
-        .any(|blocked_ip| blocked_ip == ip)
+        .any(|blocked_ip| ips_match(blocked_ip, ip))
+}
+
+/// Returns true when `a` and `b` denote the same IP address, comparing on
+/// canonical form so non-canonical IPv6 spellings in config still match.
+/// Falls back to byte equality when either side fails to parse.
+fn ips_match(a: &str, b: &str) -> bool {
+    match (parse_canonical_ip(a), parse_canonical_ip(b)) {
+        (Some(ca), Some(cb)) => ca == cb,
+        _ => a == b,
+    }
 }
 
 /// Extracts and validates the real client IP from request headers.
@@ -161,10 +171,12 @@ fn extract_proxy_ip_from_forwarded(forwarded: &str) -> Option<String> {
 }
 
 /// Check if proxy IP is in the allowed list
-/// If no allowed proxy IPs are configured, allows any proxy IP (returns true)
+/// If no allowed proxy IPs are configured, allows any proxy IP (returns true).
+/// Comparison is done on canonical form so non-canonical IPv6 spellings in
+/// config still match (`2001:0db8::1` vs `2001:db8::1`).
 fn is_proxy_ip_allowed(proxy_ip: &str, allowed_proxy_ips: Option<&[String]>) -> bool {
     match allowed_proxy_ips {
-        Some(allowed_ips) => allowed_ips.iter().any(|ip| ip == proxy_ip),
+        Some(allowed_ips) => allowed_ips.iter().any(|ip| ips_match(ip, proxy_ip)),
         None => true, // If no allowlist is configured, allow any proxy IP
     }
 }
@@ -285,6 +297,21 @@ mod tests {
         assert!(is_ip_blocked("::1", &config));
         assert!(is_ip_blocked("2001:db8::1", &config));
         assert!(!is_ip_blocked("2001:db8::2", &config));
+    }
+
+    #[test]
+    fn test_is_ip_blocked_matches_non_canonical_config() {
+        // Operator typed the IPv6 in full form in config; runtime sees canonical form.
+        let config =
+            TestConfig::new().with_blocked_ips(vec!["2001:0db8:0000:0000:0000:0000:0000:0001"]);
+        assert!(is_ip_blocked("2001:db8::1", &config));
+    }
+
+    #[test]
+    fn test_is_proxy_ip_allowed_matches_non_canonical_config() {
+        let allowed = vec!["2001:0db8:0000:0000:0000:0000:0000:0001".to_string()];
+        assert!(is_proxy_ip_allowed("2001:db8::1", Some(&allowed)));
+        assert!(!is_proxy_ip_allowed("2001:db8::2", Some(&allowed)));
     }
 
     // ===========================================
