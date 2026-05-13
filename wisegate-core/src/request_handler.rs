@@ -59,8 +59,12 @@ use crate::{auth, headers, ip_filter, rate_limiter};
 ///
 /// # Security
 ///
-/// * **Strict mode** (proxy allowlist configured): requests without a valid
-///   `Forwarded` header chain are rejected with `400 Bad Request`.
+/// * **Strict mode** (proxy allowlist configured): both `X-Forwarded-For`
+///   and `Forwarded` headers must be present. The proxy IP is taken from the
+///   `Forwarded` header's `by=` field and matched against the allowlist; the
+///   client IP is taken from the last entry of `X-Forwarded-For`. Requests
+///   missing either header, or whose proxy is not in the allowlist, are
+///   rejected with `400 Bad Request`.
 /// * **Permissive mode** (no allowlist): if a request supplies an
 ///   `X-Forwarded-For` or `Forwarded` header, the parsed IP is trusted as the
 ///   real client IP and re-emitted to the upstream as `X-Real-IP`. An
@@ -70,7 +74,7 @@ use crate::{auth, headers, ip_filter, rate_limiter};
 /// * Any client-supplied `X-Real-IP` header is stripped before processing.
 /// * The `Authorization` header is stripped before forwarding whenever
 ///   wisegate performed authentication (see
-///   [`AuthenticationProvider::forward_authorization_header`]).
+///   [`crate::AuthenticationProvider::forward_authorization_header`]).
 pub async fn handle_request<C: ConfigProvider>(
     req: Request<Incoming>,
     forward_host: Arc<str>,
