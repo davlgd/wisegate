@@ -94,6 +94,8 @@ wisegate -l 8080 -f 9000
 - ✅ Method and pattern filtering still active
 - ✅ Rate limiting when IP is available
 
+> ⚠️ Permissive mode trusts client-supplied `X-Forwarded-For` / `Forwarded` headers verbatim. An attacker who can reach WiseGate directly can spoof their apparent IP by forging them. Use permissive mode only when WiseGate sits behind another reverse proxy that strips or normalises these headers, or when IP attribution is not a security boundary.
+
 ## 🔐 Authentication
 
 WiseGate supports two authentication methods that can be used independently or together.

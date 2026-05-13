@@ -19,6 +19,12 @@
 //! - Attempts to extract client IP from available headers
 //! - Falls back gracefully if headers are missing
 //!
+//! ⚠️ Permissive mode trusts client-supplied `X-Forwarded-For`/`Forwarded`
+//! headers verbatim. An attacker who can reach wisegate directly can spoof
+//! their apparent IP by forging these headers. Use permissive mode only when
+//! wisegate sits behind another reverse proxy that strips or normalises them,
+//! or when IP attribution is not a security boundary.
+//!
 //! # Example
 //!
 //! ```ignore
