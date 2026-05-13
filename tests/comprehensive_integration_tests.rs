@@ -240,16 +240,15 @@ with socketserver.TCPServer(('localhost', {}), TestBackendHandler) as httpd:
                     "1",
                 ])
                 .output()
+                && output.status.success()
             {
-                if output.status.success() {
-                    let status_code = String::from_utf8_lossy(&output.stdout);
-                    if status_code == "200"
-                        || status_code == "401"
-                        || status_code == "404"
-                        || status_code == "405"
-                    {
-                        return true;
-                    }
+                let status_code = String::from_utf8_lossy(&output.stdout);
+                if status_code == "200"
+                    || status_code == "401"
+                    || status_code == "404"
+                    || status_code == "405"
+                {
+                    return true;
                 }
             }
             thread::sleep(Duration::from_millis(200));
@@ -416,7 +415,7 @@ fn test_blocked_url_patterns() {
 
     for path in blocked_paths {
         let (status, _) = make_request(&env, "GET", path, None, None)
-            .expect(&format!("Failed to make request to {path}"));
+            .unwrap_or_else(|_| panic!("Failed to make request to {path}"));
 
         assert_eq!(status, 404, "Path {} should be blocked with 404", path);
     }
@@ -442,7 +441,7 @@ fn test_rate_limiting() {
 
     // In permissive mode, rate limiting might not work if IP is "unknown"
     // So we check if we got consistent 200s OR some 429s
-    let has_429 = status_codes.iter().any(|&code| code == 429);
+    let has_429 = status_codes.contains(&429);
     let all_200 = status_codes.iter().all(|&code| code == 200);
 
     assert!(
@@ -570,7 +569,7 @@ fn test_url_encoded_bypass_attempt() {
 
     for path in encoded_paths {
         let (status, _) = make_request(&env, "GET", path, None, None)
-            .expect(&format!("Failed to make request to {path}"));
+            .unwrap_or_else(|_| panic!("Failed to make request to {path}"));
 
         assert_eq!(
             status, 404,
@@ -646,7 +645,7 @@ fn test_special_characters_in_path() {
 
     for path in paths {
         let (status, _) = make_request(&env, "GET", path, None, None)
-            .expect(&format!("Failed to make request to {path}"));
+            .unwrap_or_else(|_| panic!("Failed to make request to {path}"));
 
         assert_eq!(status, 200, "Path {} should succeed", path);
     }
