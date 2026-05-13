@@ -26,7 +26,11 @@ impl ConnectionTracker {
 
     /// Acquire an RAII guard that increments the counter on creation
     /// and decrements it on drop, ensuring correct tracking even on panic.
-    pub fn track(&self) -> ConnectionGuard {
+    ///
+    /// The returned guard's type is intentionally opaque: bind it to a
+    /// variable to hold the slot, and drop it (implicitly at scope exit) to
+    /// release it.
+    pub fn track(&self) -> impl Drop + use<> {
         self.active.fetch_add(1, Ordering::AcqRel);
         ConnectionGuard {
             active: self.active.clone(),
@@ -62,9 +66,10 @@ impl Default for ConnectionTracker {
 
 /// RAII guard that decrements the connection count on drop.
 ///
-/// Uses saturating subtraction to prevent underflow.
+/// Uses saturating subtraction to prevent underflow. Returned opaquely from
+/// [`ConnectionTracker::track`] so callers only depend on its `Drop` semantics.
 #[derive(Debug)]
-pub struct ConnectionGuard {
+struct ConnectionGuard {
     active: Arc<AtomicUsize>,
 }
 
