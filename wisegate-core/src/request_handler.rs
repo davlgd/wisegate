@@ -132,8 +132,10 @@ pub async fn handle_request<C: ConfigProvider>(
         return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
-    // Add X-Real-IP header for upstream service
+    // Strip any client-supplied X-Real-IP first to prevent spoofing, then insert
+    // the validated one (if any) so upstream sees only wisegate's value.
     let mut req = req;
+    req.headers_mut().remove(headers::X_REAL_IP);
     if let Some(ref ip) = real_client_ip
         && let Ok(header_value) = ip.parse()
     {
