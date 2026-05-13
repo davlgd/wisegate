@@ -56,6 +56,7 @@ static MAX_CONNECTIONS: LazyLock<usize> = LazyLock::new(compute_max_connections)
 static AUTH_CREDENTIALS: LazyLock<Credentials> = LazyLock::new(compute_auth_credentials);
 static AUTH_REALM: LazyLock<String> = LazyLock::new(compute_auth_realm);
 static BEARER_TOKEN: LazyLock<Option<String>> = LazyLock::new(compute_bearer_token);
+static FORWARD_AUTH_HEADER: LazyLock<bool> = LazyLock::new(compute_forward_auth_header);
 
 /// Whitelisted environment variable names for proxy IPs.
 ///
@@ -584,6 +585,25 @@ fn compute_bearer_token() -> Option<String> {
         .filter(|s| !s.trim().is_empty())
 }
 
+/// Returns whether the `Authorization` header should be forwarded upstream
+/// after wisegate has performed authentication.
+///
+/// Default: `false` (strip the header). Accepts `1`, `true`, `yes`, `on`
+/// (case-insensitive) in `CC_FORWARD_AUTH_HEADER` to enable forwarding.
+pub fn get_forward_auth_header() -> bool {
+    *FORWARD_AUTH_HEADER
+}
+
+fn compute_forward_auth_header() -> bool {
+    env::var(env_vars::CC_FORWARD_AUTH_HEADER)
+        .ok()
+        .map(|s| {
+            let v = s.trim().to_ascii_lowercase();
+            matches!(v.as_str(), "1" | "true" | "yes" | "on")
+        })
+        .unwrap_or(false)
+}
+
 // ============================================================================
 // EnvVarConfig - ConfigProvider implementation using environment variables
 // ============================================================================
@@ -681,6 +701,10 @@ impl AuthenticationProvider for EnvVarConfig {
 
     fn bearer_token(&self) -> Option<&str> {
         get_bearer_token()
+    }
+
+    fn forward_authorization_header(&self) -> bool {
+        get_forward_auth_header()
     }
 }
 

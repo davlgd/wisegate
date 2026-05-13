@@ -202,7 +202,8 @@ async fn forward_request(
         }
     };
 
-    forward_with_reqwest(parts, body_bytes, host, port, http_client).await
+    let strip_auth = config.is_auth_enabled() && !config.forward_authorization_header();
+    forward_with_reqwest(parts, body_bytes, host, port, http_client, strip_auth).await
 }
 
 /// Shared forwarding logic using reqwest with connection pooling
@@ -212,6 +213,7 @@ async fn forward_with_reqwest(
     host: &str,
     port: u16,
     client: &reqwest::Client,
+    strip_auth: bool,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     // Construct destination URI
     let destination_uri = format!(
@@ -232,10 +234,13 @@ async fn forward_with_reqwest(
     };
     let mut req_builder = client.request(method, &destination_uri);
 
-    // Add headers (excluding host, content-length, and hop-by-hop headers per RFC 7230)
+    // Add headers (excluding host, content-length, and hop-by-hop headers per RFC 7230).
+    // When `strip_auth` is set, also drop Authorization so the upstream cannot
+    // re-validate or log credentials wisegate just consumed.
     for (name, value) in parts.headers.iter() {
         if name != headers::HOST
             && name != headers::CONTENT_LENGTH
+            && !(strip_auth && name == headers::AUTHORIZATION)
             && !headers::is_hop_by_hop(name.as_str())
             && let Ok(header_value) = value.to_str()
         {

@@ -86,6 +86,19 @@ pub trait AuthenticationProvider: Send + Sync {
     fn is_auth_enabled(&self) -> bool {
         self.is_basic_auth_enabled() || self.is_bearer_auth_enabled()
     }
+
+    /// Whether to forward the `Authorization` header to the upstream service.
+    ///
+    /// Default: `false`. When wisegate has performed authentication, the
+    /// credentials have already served their purpose, and forwarding them
+    /// leaks secrets to every downstream service. Set to `true` only when
+    /// the upstream genuinely needs to re-validate the same credentials.
+    ///
+    /// When authentication is disabled (`is_auth_enabled() == false`), this
+    /// setting has no effect: the header passes through transparently.
+    fn forward_authorization_header(&self) -> bool {
+        false
+    }
 }
 
 // ============================================================================
