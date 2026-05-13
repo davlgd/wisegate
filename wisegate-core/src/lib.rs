@@ -12,70 +12,34 @@
 //! into any Rust application. Configuration is provided via the [`ConfigProvider`]
 //! trait, allowing flexible configuration from any source.
 //!
-//! # Example
+//! # Quick start
 //!
-//! ```rust,no_run
-//! use wisegate_core::{
-//!     RateLimitingProvider, ProxyProvider, FilteringProvider, ConnectionProvider,
-//!     AuthenticationProvider, Credentials,
-//!     RateLimiter, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig,
-//! };
-//! use std::time::Duration;
+//! [`DefaultConfig`] pre-implements every configuration trait, so a minimal
+//! setup needs no boilerplate. Mutate its public fields to customize behaviour:
 //!
-//! // Implement your own configuration provider using composable traits
-//! struct MyConfig {
-//!     credentials: Credentials,
-//! }
-//!
-//! impl RateLimitingProvider for MyConfig {
-//!     fn rate_limit_config(&self) -> &RateLimitConfig {
-//!         static CONFIG: RateLimitConfig = RateLimitConfig {
-//!             max_requests: 100,
-//!             window_duration: Duration::from_secs(60),
-//!         };
-//!         &CONFIG
-//!     }
-//!
-//!     fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
-//!         static CONFIG: RateLimitCleanupConfig = RateLimitCleanupConfig {
-//!             threshold: 10_000,
-//!             interval: Duration::from_secs(60),
-//!         };
-//!         &CONFIG
-//!     }
-//! }
-//!
-//! impl ProxyProvider for MyConfig {
-//!     fn proxy_config(&self) -> &ProxyConfig {
-//!         static CONFIG: ProxyConfig = ProxyConfig {
-//!             timeout: Duration::from_secs(30),
-//!             max_body_size: 100 * 1024 * 1024,
-//!         };
-//!         &CONFIG
-//!     }
-//!
-//!     fn allowed_proxy_ips(&self) -> Option<&[String]> { None }
-//! }
-//!
-//! impl FilteringProvider for MyConfig {
-//!     fn blocked_ips(&self) -> &[String] { &[] }
-//!     fn blocked_methods(&self) -> &[String] { &[] }
-//!     fn blocked_patterns(&self) -> &[String] { &[] }
-//! }
-//!
-//! impl ConnectionProvider for MyConfig {
-//!     fn max_connections(&self) -> usize { 10_000 }
-//! }
-//!
-//! impl AuthenticationProvider for MyConfig {
-//!     fn auth_credentials(&self) -> &Credentials { &self.credentials }
-//!     fn auth_realm(&self) -> &str { "WiseGate" }
-//!     fn bearer_token(&self) -> Option<&str> { None }
-//! }
-//!
-//! // Create a rate limiter
-//! let limiter = RateLimiter::new();
 //! ```
+//! use std::time::Duration;
+//! use wisegate_core::{DefaultConfig, RateLimiter};
+//!
+//! let mut config = DefaultConfig::default();
+//! config.rate_limit.max_requests = 200;
+//! config.rate_limit.window_duration = Duration::from_secs(30);
+//! config.blocked_methods = vec!["TRACE".into(), "CONNECT".into()];
+//!
+//! let _limiter = RateLimiter::new();
+//! ```
+//!
+//! When you need finer control, implement the composable traits directly
+//! ([`RateLimitingProvider`], [`ProxyProvider`], [`FilteringProvider`],
+//! [`ConnectionProvider`], [`AuthenticationProvider`]). See [`types`] for
+//! a worked example of bespoke implementations.
+//!
+//! # Wiring it into hyper
+//!
+//! [`request_handler::handle_request`] is async and expects a Tokio runtime —
+//! call it from inside `#[tokio::main]` or any other Tokio executor. It takes
+//! an `Arc<C: ConfigProvider>` so the same configuration can be cloned cheaply
+//! across spawned tasks.
 //!
 //! # Modules
 //!
@@ -89,6 +53,7 @@
 #![forbid(unsafe_code)]
 
 pub mod auth;
+pub mod default_config;
 pub mod defaults;
 pub mod error;
 pub mod headers;
@@ -101,6 +66,7 @@ pub mod types;
 
 // Re-export commonly used items at crate root
 pub use auth::{Credential, Credentials, check_basic_auth, check_bearer_token};
+pub use default_config::DefaultConfig;
 pub use error::WiseGateError;
 pub use types::{
     // Composable configuration traits
