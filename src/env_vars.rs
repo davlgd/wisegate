@@ -136,6 +136,17 @@ pub const CC_HTTP_BASIC_AUTH_REALM: &str = "CC_HTTP_BASIC_AUTH_REALM";
 /// **Example**: `"my-secret-api-key"`
 pub const CC_BEARER_TOKEN: &str = "CC_BEARER_TOKEN";
 
+/// Forward the `Authorization` header to the upstream service after wisegate
+/// has verified credentials.
+///
+/// Default: `false` (strip). When wisegate enforces authentication, the
+/// credentials have already served their purpose. Set to `true` only when
+/// the upstream genuinely needs to re-validate the same credentials.
+/// Accepts `1`, `true`, `yes`, `on` (case-insensitive) to enable.
+///
+/// **Example**: `"true"`
+pub const CC_FORWARD_AUTH_HEADER: &str = "CC_FORWARD_AUTH_HEADER";
+
 // ============================================================================
 // Proxy Behavior Configuration
 // ============================================================================
@@ -198,6 +209,7 @@ pub fn all_env_vars() -> &'static [&'static str] {
         CC_HTTP_BASIC_AUTH,
         CC_HTTP_BASIC_AUTH_REALM,
         CC_BEARER_TOKEN,
+        CC_FORWARD_AUTH_HEADER,
         PROXY_TIMEOUT_SECS,
         MAX_BODY_SIZE_MB,
         MAX_CONNECTIONS,
