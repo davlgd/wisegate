@@ -101,7 +101,7 @@ pub mod types;
 
 // Re-export commonly used items at crate root
 pub use auth::{Credential, Credentials, check_basic_auth, check_bearer_token};
-pub use error::{Result, WiseGateError};
+pub use error::WiseGateError;
 pub use types::{
     // Composable configuration traits
     AuthenticationProvider,

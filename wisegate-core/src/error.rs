@@ -5,9 +5,6 @@
 
 use thiserror::Error;
 
-/// Result type alias for WiseGate operations.
-pub type Result<T> = std::result::Result<T, WiseGateError>;
-
 /// Unified error type for WiseGate operations.
 ///
 /// This enum covers all error cases that can occur during request processing,
@@ -16,9 +13,9 @@ pub type Result<T> = std::result::Result<T, WiseGateError>;
 /// # Example
 ///
 /// ```
-/// use wisegate_core::error::{WiseGateError, Result};
+/// use wisegate_core::error::WiseGateError;
 ///
-/// fn validate_ip(ip: &str) -> Result<()> {
+/// fn validate_ip(ip: &str) -> Result<(), WiseGateError> {
 ///     if ip.is_empty() {
 ///         return Err(WiseGateError::InvalidIp("IP address cannot be empty".into()));
 ///     }
@@ -79,7 +76,6 @@ pub enum WiseGateError {
     /// HTTP client error (from reqwest).
     #[error("HTTP client error: {0}")]
     HttpClientError(#[from] reqwest::Error),
-
 }
 
 impl WiseGateError {
@@ -168,10 +164,18 @@ mod tests {
     }
 
     #[test]
-    fn test_status_codes() {
+    fn test_status_codes_all_variants() {
         assert_eq!(
             WiseGateError::InvalidIp("".into()).status_code(),
             StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            WiseGateError::ConfigError("".into()).status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_eq!(
+            WiseGateError::ProxyError("".into()).status_code(),
+            StatusCode::BAD_GATEWAY
         );
         assert_eq!(
             WiseGateError::RateLimitExceeded("".into()).status_code(),
@@ -190,6 +194,10 @@ mod tests {
             StatusCode::METHOD_NOT_ALLOWED
         );
         assert_eq!(
+            WiseGateError::UpstreamConnectionFailed("".into()).status_code(),
+            StatusCode::BAD_GATEWAY
+        );
+        assert_eq!(
             WiseGateError::UpstreamTimeout("".into()).status_code(),
             StatusCode::GATEWAY_TIMEOUT
         );
@@ -197,28 +205,51 @@ mod tests {
             WiseGateError::BodyTooLarge { size: 0, max: 0 }.status_code(),
             StatusCode::PAYLOAD_TOO_LARGE
         );
+        assert_eq!(
+            WiseGateError::BodyReadError("".into()).status_code(),
+            StatusCode::BAD_REQUEST
+        );
     }
 
     #[test]
-    fn test_user_messages() {
+    fn test_user_messages_do_not_leak_internals() {
         assert_eq!(
-            WiseGateError::ConfigError("secret".into()).user_message(),
+            WiseGateError::ConfigError("database connection string".into()).user_message(),
             "Internal server error"
+        );
+        assert_eq!(
+            WiseGateError::ProxyError("connection refused".into()).user_message(),
+            "Bad gateway"
         );
         assert_eq!(
             WiseGateError::IpBlocked("10.0.0.1".into()).user_message(),
             "Access denied"
         );
+        assert_eq!(
+            WiseGateError::UpstreamConnectionFailed("".into()).user_message(),
+            "Service unavailable"
+        );
+        assert_eq!(
+            WiseGateError::BodyReadError("".into()).user_message(),
+            "Bad request"
+        );
     }
 
     #[test]
-    fn test_is_server_error() {
+    fn test_is_server_error_all_variants() {
+        // Server errors
         assert!(WiseGateError::ConfigError("".into()).is_server_error());
+        assert!(WiseGateError::ProxyError("".into()).is_server_error());
         assert!(WiseGateError::UpstreamConnectionFailed("".into()).is_server_error());
         assert!(WiseGateError::UpstreamTimeout("".into()).is_server_error());
 
+        // Client/expected errors
+        assert!(!WiseGateError::InvalidIp("".into()).is_server_error());
         assert!(!WiseGateError::RateLimitExceeded("".into()).is_server_error());
         assert!(!WiseGateError::IpBlocked("".into()).is_server_error());
+        assert!(!WiseGateError::PatternBlocked("".into()).is_server_error());
         assert!(!WiseGateError::MethodBlocked("".into()).is_server_error());
+        assert!(!WiseGateError::BodyTooLarge { size: 0, max: 0 }.is_server_error());
+        assert!(!WiseGateError::BodyReadError("".into()).is_server_error());
     }
 }

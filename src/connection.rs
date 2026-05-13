@@ -260,10 +260,4 @@ mod tests {
         let permit2 = limiter.try_acquire();
         assert!(permit2.is_some());
     }
-
-    #[test]
-    fn test_connection_limiter_default_unlimited() {
-        let limiter = ConnectionLimiter::new(0);
-        assert!(!limiter.is_enabled());
-    }
 }

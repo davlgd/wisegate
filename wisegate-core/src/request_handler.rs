@@ -664,4 +664,70 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(body, "");
     }
+
+    // ===========================================
+    // create_unauthorized_response tests
+    // ===========================================
+
+    #[test]
+    fn test_unauthorized_response_status() {
+        let response = create_unauthorized_response("WiseGate");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_unauthorized_response_www_authenticate_header() {
+        let response = create_unauthorized_response("WiseGate");
+        let header = response
+            .headers()
+            .get("www-authenticate")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert_eq!(header, "Basic realm=\"WiseGate\"");
+    }
+
+    #[test]
+    fn test_unauthorized_response_realm_with_quotes() {
+        let response = create_unauthorized_response("My \"Realm\"");
+        let header = response
+            .headers()
+            .get("www-authenticate")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert_eq!(header, "Basic realm=\"My \\\"Realm\\\"\"");
+    }
+
+    #[test]
+    fn test_unauthorized_response_realm_with_backslash() {
+        let response = create_unauthorized_response("My\\Realm");
+        let header = response
+            .headers()
+            .get("www-authenticate")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert_eq!(header, "Basic realm=\"My\\\\Realm\"");
+    }
+
+    #[test]
+    fn test_unauthorized_response_content_type() {
+        let response = create_unauthorized_response("WiseGate");
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "text/plain"
+        );
+    }
+
+    // ===========================================
+    // double-encoding test
+    // ===========================================
+
+    #[test]
+    fn test_url_decode_double_encoding_not_decoded_twice() {
+        // %252e decodes to %2e on first pass — should NOT become '.'
+        assert_eq!(url_decode("%252e"), "%2e");
+        assert_eq!(url_decode("%2565nv"), "%65nv");
+    }
 }

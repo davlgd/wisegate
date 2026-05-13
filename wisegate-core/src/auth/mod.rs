@@ -73,11 +73,6 @@ impl Credentials {
         self.entries.len()
     }
 
-    /// Returns an iterator over the credentials.
-    pub fn iter(&self) -> impl Iterator<Item = &Credential> {
-        self.entries.iter()
-    }
-
     /// Verifies credentials from an HTTP Authorization header.
     ///
     /// Expects the header value in the format `Basic {base64-encoded-credentials}`

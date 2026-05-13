@@ -111,14 +111,20 @@ pub fn extract_and_validate_real_ip(
         extract_client_ip_from_xff(xff)
     } else {
         // Permissive mode: try to extract client IP from available headers
-        if let Some(xff) = headers.get(headers::X_FORWARDED_FOR).and_then(|h| h.to_str().ok()) {
+        if let Some(xff) = headers
+            .get(headers::X_FORWARDED_FOR)
+            .and_then(|h| h.to_str().ok())
+        {
             // If we have x-forwarded-for, try to extract client IP from it
             if let Some(client_ip) = extract_client_ip_from_xff(xff) {
                 return Some(client_ip);
             }
         }
 
-        if let Some(forwarded) = headers.get(headers::FORWARDED).and_then(|h| h.to_str().ok()) {
+        if let Some(forwarded) = headers
+            .get(headers::FORWARDED)
+            .and_then(|h| h.to_str().ok())
+        {
             // If we have forwarded header, try to extract client IP
             if let Some(client_ip) = extract_client_ip_from_forwarded(forwarded) {
                 return Some(client_ip);

@@ -86,12 +86,6 @@ impl TestConfig {
         self
     }
 
-    /// Configure cleanup threshold.
-    pub fn with_cleanup(mut self, threshold: usize) -> Self {
-        self.cleanup.threshold = threshold;
-        self
-    }
-
     /// Configure blocked IPs.
     pub fn with_blocked_ips(mut self, ips: Vec<&str>) -> Self {
         self.blocked_ips = ips.into_iter().map(String::from).collect();
@@ -107,24 +101,6 @@ impl TestConfig {
     /// Configure blocked URL patterns.
     pub fn with_blocked_patterns(mut self, patterns: Vec<&str>) -> Self {
         self.blocked_patterns = patterns.into_iter().map(String::from).collect();
-        self
-    }
-
-    /// Configure authentication credentials.
-    pub fn with_auth_credentials(mut self, credentials: Credentials) -> Self {
-        self.auth_credentials = credentials;
-        self
-    }
-
-    /// Configure authentication realm.
-    pub fn with_auth_realm(mut self, realm: &str) -> Self {
-        self.auth_realm = realm.to_string();
-        self
-    }
-
-    /// Configure bearer token.
-    pub fn with_bearer_token(mut self, token: &str) -> Self {
-        self.bearer_token = Some(token.to_string());
         self
     }
 }

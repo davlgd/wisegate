@@ -13,11 +13,11 @@ use tokio::net::TcpListener;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use wisegate::{ConnectionProvider, ProxyProvider, RateLimiter};
 use wisegate::args::Args;
 use wisegate::config::EnvVarConfig;
 use wisegate::connection::{ConnectionLimiter, ConnectionTracker};
 use wisegate::server::StartupConfig;
+use wisegate::{ConnectionProvider, ProxyProvider, RateLimiter};
 use wisegate::{request_handler, server};
 
 /// Graceful shutdown timeout in seconds

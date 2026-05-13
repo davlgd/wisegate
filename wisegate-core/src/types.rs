@@ -392,16 +392,6 @@ impl RateLimiter {
     pub(crate) fn state(&self) -> &Arc<Mutex<RateLimiterState>> {
         &self.state
     }
-
-    /// Returns the number of tracked IPs.
-    pub async fn entry_count(&self) -> usize {
-        self.state.lock().await.entries.len()
-    }
-
-    /// Returns true if no IPs are being tracked.
-    pub async fn is_empty(&self) -> bool {
-        self.state.lock().await.entries.is_empty()
-    }
 }
 
 impl Default for RateLimiter {
@@ -563,12 +553,6 @@ mod tests {
         assert!(entry.oldest().unwrap().elapsed() < Duration::from_millis(100));
     }
 
-    #[test]
-    fn test_rate_limit_entry_default() {
-        let entry = RateLimitEntry::default();
-        assert_eq!(entry.request_count(), 1);
-    }
-
     // ===========================================
     // RateLimiter tests
     // ===========================================
@@ -578,13 +562,7 @@ mod tests {
         let limiter = RateLimiter::new();
         let state = limiter.state().lock().await;
         assert!(state.entries.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_rate_limiter_default_is_empty() {
-        let limiter = RateLimiter::default();
-        let state = limiter.state().lock().await;
-        assert!(state.entries.is_empty());
+        assert!(state.last_cleanup.is_none());
     }
 
     #[tokio::test]
@@ -603,11 +581,51 @@ mod tests {
         }
     }
 
+    // ===========================================
+    // AuthenticationProvider default method tests
+    // ===========================================
+
     #[test]
-    fn test_rate_limiter_clone() {
-        let limiter1 = RateLimiter::new();
-        let limiter2 = limiter1.clone();
-        // Both should point to the same state Arc
-        assert!(Arc::ptr_eq(limiter1.state(), limiter2.state()));
+    fn test_auth_provider_defaults_no_auth() {
+        let config = crate::test_utils::TestConfig::new();
+        assert!(!config.is_basic_auth_enabled());
+        assert!(!config.is_bearer_auth_enabled());
+        assert!(!config.is_auth_enabled());
+    }
+
+    #[test]
+    fn test_auth_provider_basic_auth_only() {
+        use crate::auth::{Credential, Credentials};
+        let config = crate::test_utils::TestConfig {
+            auth_credentials: Credentials::from_entries(vec![Credential::new(
+                "admin".into(),
+                "pass".into(),
+            )]),
+            ..Default::default()
+        };
+        assert!(config.is_basic_auth_enabled());
+        assert!(!config.is_bearer_auth_enabled());
+        assert!(config.is_auth_enabled());
+    }
+
+    #[test]
+    fn test_auth_provider_bearer_only() {
+        let config = crate::test_utils::TestConfig {
+            bearer_token: Some("my-token".into()),
+            ..Default::default()
+        };
+        assert!(!config.is_basic_auth_enabled());
+        assert!(config.is_bearer_auth_enabled());
+        assert!(config.is_auth_enabled());
+    }
+
+    #[test]
+    fn test_auth_provider_empty_bearer_is_disabled() {
+        let config = crate::test_utils::TestConfig {
+            bearer_token: Some("".into()),
+            ..Default::default()
+        };
+        assert!(!config.is_bearer_auth_enabled());
+        assert!(!config.is_auth_enabled());
     }
 }

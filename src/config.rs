@@ -551,21 +551,6 @@ fn compute_auth_realm() -> String {
         .unwrap_or_else(|_| defaults::AUTH_REALM.to_string())
 }
 
-/// Returns true if authentication is enabled (credentials configured).
-///
-/// # Example
-///
-/// ```
-/// use wisegate::config::is_auth_enabled;
-///
-/// if is_auth_enabled() {
-///     println!("Basic authentication is enabled");
-/// }
-/// ```
-pub fn is_auth_enabled() -> bool {
-    !AUTH_CREDENTIALS.is_empty() || get_bearer_token().is_some()
-}
-
 /// Returns the cached bearer token for API authentication.
 ///
 /// The bearer token enables RFC 6750 Bearer Token authentication.
@@ -921,57 +906,30 @@ mod tests {
     // ===========================================
 
     #[test]
-    fn test_env_var_config_new() {
+    fn test_env_var_config_default_values() {
         let config = EnvVarConfig::new();
-        // Should not panic and create valid config
-        assert!(config.rate_limit_config().max_requests > 0);
-    }
 
-    #[test]
-    fn test_env_var_config_default() {
-        let config = EnvVarConfig::default();
-        // Default should work the same as new
-        assert!(config.rate_limit_config().max_requests > 0);
-    }
-
-    #[test]
-    fn test_env_var_config_rate_limit_config() {
-        let config = EnvVarConfig::new();
+        // Rate limiting defaults
         let rate_config = config.rate_limit_config();
-        // Should return valid defaults
         assert!(rate_config.is_valid());
-    }
+        assert_eq!(rate_config.max_requests, defaults::RATE_LIMIT_REQUESTS);
+        assert_eq!(
+            rate_config.window_duration,
+            Duration::from_secs(defaults::RATE_LIMIT_WINDOW_SECS)
+        );
 
-    #[test]
-    fn test_env_var_config_proxy_config() {
-        let config = EnvVarConfig::new();
-        let proxy_config = config.proxy_config();
-        // Should return valid defaults
-        assert!(proxy_config.is_valid());
-    }
+        // Proxy defaults
+        assert!(config.proxy_config().is_valid());
 
-    #[test]
-    fn test_env_var_config_cleanup_config() {
-        let config = EnvVarConfig::new();
-        let cleanup_config = config.rate_limit_cleanup_config();
-        // Default cleanup should be enabled
-        assert!(cleanup_config.is_enabled());
-    }
+        // Cleanup defaults
+        assert!(config.rate_limit_cleanup_config().is_enabled());
 
-    #[test]
-    fn test_env_var_config_max_connections() {
-        let config = EnvVarConfig::new();
-        let max_conn = config.max_connections();
-        // Should have a reasonable default
-        assert!(max_conn > 0);
-    }
+        // Connection defaults
+        assert_eq!(config.max_connections(), defaults::MAX_CONNECTIONS);
 
-    #[test]
-    fn test_env_var_config_blocked_lists_not_null() {
-        let config = EnvVarConfig::new();
-        // These should return empty slices, not panic
-        let _ = config.blocked_ips();
-        let _ = config.blocked_methods();
-        let _ = config.blocked_patterns();
+        // Blocked lists should be empty by default
+        assert!(config.blocked_ips().is_empty());
+        assert!(config.blocked_methods().is_empty());
+        assert!(config.blocked_patterns().is_empty());
     }
 }

@@ -489,11 +489,17 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(10)).await;
         check_rate_limit(&limiter, "192.168.1.3", &config).await;
 
-        // Only recent entries should remain (older ones cleaned up)
+        // The first entry should have been cleaned up (expired > 2x window)
         let state = limiter.state().lock().await;
-        // Due to timing, we can't predict exactly which entries remain
-        // but we can verify cleanup mechanism works by checking count is <= 3
-        assert!(state.entries.len() <= 3);
+        assert!(
+            !state.entries.contains_key("192.168.1.1"),
+            "Expired entry should have been cleaned up"
+        );
+        // At least the most recent entry should remain
+        assert!(
+            state.entries.contains_key("192.168.1.3"),
+            "Recent entry should still exist"
+        );
     }
 
     // ===========================================
