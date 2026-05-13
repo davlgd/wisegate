@@ -20,6 +20,35 @@ use std::net::IpAddr;
 
 use clap::Parser;
 
+const AFTER_HELP: &str = "Environment variables:
+  Proxy security:
+    CC_REVERSE_PROXY_IPS               Trusted proxy IPs (enables strict mode)
+    TRUSTED_PROXY_IPS_VAR              Alt variable name to read proxy IPs from
+
+  Filtering:
+    BLOCKED_IPS                        Comma-separated client IPs to block
+    BLOCKED_METHODS                    HTTP methods to block (e.g. PUT,DELETE)
+    BLOCKED_PATTERNS                   URL substrings to block (case-insensitive)
+
+  Rate limiting:
+    RATE_LIMIT_REQUESTS                Max requests per window     (default: 100)
+    RATE_LIMIT_WINDOW_SECS             Window duration in seconds  (default: 60)
+    RATE_LIMIT_CLEANUP_THRESHOLD       Entries before auto-cleanup (default: 10000, 0=off)
+    RATE_LIMIT_CLEANUP_INTERVAL_SECS   Min seconds between cleanups (default: 60)
+
+  Authentication:
+    CC_HTTP_BASIC_AUTH                 user:password (also _1, _2, ... for more users)
+    CC_HTTP_BASIC_AUTH_REALM           WWW-Authenticate realm      (default: WiseGate)
+    CC_BEARER_TOKEN                    Bearer token (RFC 6750)
+    CC_FORWARD_AUTH_HEADER             Forward Authorization upstream (default: false)
+
+  Proxy behaviour:
+    PROXY_TIMEOUT_SECS                 Upstream request timeout    (default: 30)
+    MAX_BODY_SIZE_MB                   Max body size in MB         (default: 100, 0=unlimited)
+    MAX_CONNECTIONS                    Max concurrent connections  (default: 10000, 0=unlimited)
+
+Full reference: https://crates.io/crates/wisegate";
+
 /// Command line arguments for WiseGate.
 ///
 /// This struct defines all CLI options available for configuring the reverse proxy.
@@ -54,9 +83,7 @@ use clap::Parser;
 #[command(
     long_about = "🧙‍ \"You shall not pass!\" - A wise guardian for your network gates\nAn efficient, secure reverse proxy with built-in rate limiting and IP filtering\n\nExample usage:\n  wisegate --listen 8080 --forward 9000\n  wisegate -l 8080 -f 9000 --verbose"
 )]
-#[command(
-    after_help = "Environment variables:\n  CC_REVERSE_PROXY_IPS   Trusted proxy IPs (enables strict mode)\n  BLOCKED_IPS            Comma-separated blocked client IPs\n  BLOCKED_METHODS        HTTP methods to block (e.g., PUT,DELETE)\n  BLOCKED_PATTERNS       URL patterns to block (e.g., .php,.yaml)\n  RATE_LIMIT_REQUESTS    Max requests per window (default: 100)\n  RATE_LIMIT_WINDOW_SECS Rate limit window seconds (default: 60)\n\nFor more configuration options, see https://crates.io/crates/wisegate"
-)]
+#[command(after_help = AFTER_HELP)]
 pub struct Args {
     /// Address to bind to (for both listening and forwarding)
     #[arg(
