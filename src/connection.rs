@@ -30,6 +30,11 @@ impl ConnectionTracker {
     /// The returned guard's type is intentionally opaque: bind it to a
     /// variable to hold the slot, and drop it (implicitly at scope exit) to
     /// release it.
+    ///
+    /// The `+ use<>` is required: the guard owns its `Arc` and must be
+    /// movable into `'static` contexts (e.g. `tokio::spawn`). Without it,
+    /// the Rust 2024 default capture rules would tie the guard's lifetime
+    /// to `&self`, breaking `'static` callers.
     pub fn track(&self) -> impl Drop + use<> {
         self.active.fetch_add(1, Ordering::AcqRel);
         ConnectionGuard {
