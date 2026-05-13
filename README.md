@@ -192,66 +192,45 @@ WiseGate's core functionality is available as a separate crate `wisegate-core` f
 
 ```toml
 [dependencies]
-wisegate-core = "0.11"
+wisegate-core = "0.12"
 ```
 
+The fastest path is `DefaultConfig` — it implements every configuration trait and exposes plain public fields you can tweak:
+
 ```rust
-use wisegate_core::{
-    RateLimitingProvider, ProxyProvider, FilteringProvider,
-    ConnectionProvider, AuthenticationProvider, Credentials,
-    RateLimiter, RateLimitConfig, RateLimitCleanupConfig, ProxyConfig,
-    request_handler, ip_filter, rate_limiter,
-};
 use std::sync::Arc;
 use std::time::Duration;
+use wisegate_core::{DefaultConfig, RateLimiter, ip_filter, rate_limiter};
 
-// Implement composable configuration traits
-struct MyConfig { credentials: Credentials }
+let mut config = DefaultConfig::default();
+config.rate_limit.max_requests = 200;
+config.rate_limit.window_duration = Duration::from_secs(30);
+config.blocked_methods = vec!["TRACE".into(), "CONNECT".into()];
 
-impl RateLimitingProvider for MyConfig {
-    fn rate_limit_config(&self) -> &RateLimitConfig {
-        static C: RateLimitConfig = RateLimitConfig {
-            max_requests: 100, window_duration: Duration::from_secs(60),
-        };
-        &C
-    }
-    fn rate_limit_cleanup_config(&self) -> &RateLimitCleanupConfig {
-        static C: RateLimitCleanupConfig = RateLimitCleanupConfig {
-            threshold: 10_000, interval: Duration::from_secs(60),
-        };
-        &C
-    }
-}
-impl ProxyProvider for MyConfig {
-    fn proxy_config(&self) -> &ProxyConfig {
-        static C: ProxyConfig = ProxyConfig {
-            timeout: Duration::from_secs(30), max_body_size: 100 * 1024 * 1024,
-        };
-        &C
-    }
-    fn allowed_proxy_ips(&self) -> Option<&[String]> { None }
-}
-impl FilteringProvider for MyConfig {
-    fn blocked_ips(&self) -> &[String] { &[] }
-    fn blocked_methods(&self) -> &[String] { &[] }
-    fn blocked_patterns(&self) -> &[String] { &[] }
-}
-impl ConnectionProvider for MyConfig {
-    fn max_connections(&self) -> usize { 10_000 }
-}
-impl AuthenticationProvider for MyConfig {
-    fn auth_credentials(&self) -> &Credentials { &self.credentials }
-    fn auth_realm(&self) -> &str { "MyApp" }
-    fn bearer_token(&self) -> Option<&str> { None }
-}
-
-// Use the components
 let limiter = RateLimiter::new();
-let config = Arc::new(MyConfig { credentials: Credentials::new() });
+let config = Arc::new(config);
 
-// Individual components
-let is_blocked = ip_filter::is_ip_blocked("192.168.1.1", &*config);
-let allowed = rate_limiter::check_rate_limit(&limiter, "192.168.1.1", &*config).await;
+// Helpers used inside the pipeline are also available directly
+let _blocked = ip_filter::is_ip_blocked("192.168.1.1", &*config);
+let _allowed = rate_limiter::check_rate_limit(&limiter, "192.168.1.1", &*config).await;
+```
+
+When you need finer control, implement the composable traits yourself (`RateLimitingProvider`, `ProxyProvider`, `FilteringProvider`, `ConnectionProvider`, `AuthenticationProvider`). The blanket impl turns any type that implements all five into a `ConfigProvider` — see the [`wisegate_core::types` rustdoc](https://docs.rs/wisegate-core) for a worked example.
+
+To proxy real HTTP traffic, call `request_handler::handle_request` from inside a Tokio runtime with a shared `reqwest::Client`:
+
+```rust
+use std::sync::Arc;
+use wisegate_core::{DefaultConfig, RateLimiter, request_handler};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Arc::new(DefaultConfig::default());
+    let limiter = RateLimiter::new();
+    let http_client = reqwest::Client::new();
+    // Use `request_handler::handle_request(req, ...)` inside your hyper service.
+    Ok(())
+}
 ```
 
 ## 🛠️ Development
