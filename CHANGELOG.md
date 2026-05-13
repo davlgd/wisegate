@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-05-13
+
+### Security
+- **X-Real-IP spoofing**: Strip any client-supplied `X-Real-IP` header before processing so the upstream only ever sees the value wisegate computed.
+- **Authorization leakage**: When wisegate has performed authentication, the `Authorization` header is now stripped before forwarding. Opt back in with `CC_FORWARD_AUTH_HEADER=true` (or `AuthenticationProvider::forward_authorization_header()` in the library) when the upstream genuinely needs the credentials.
+- **IPv6 rate-limit bypass**: Extracted IPs are canonicalised (RFC 5952), so `2001:0db8::1` and `2001:db8::1` now key the same rate-limit bucket. Blocked/allowed IP lists are also matched on canonical form, so non-canonical IPv6 spellings in config still apply.
+
+### Added
+- **`wisegate_core::DefaultConfig`**: ready-to-use struct implementing every configuration trait with the same defaults as the CLI, so library users can drop wisegate-core in without trait boilerplate.
+- **Startup warnings**: warn when `CC_REVERSE_PROXY_IPS` contains the bind sentinel `0.0.0.0`, and when wisegate listens on `0.0.0.0` with no auth and no IP blocklist (a common open-proxy misconfiguration).
+- **Full env-var reference in `--help`**: every recognised variable is now listed, grouped by purpose (proxy security / filtering / rate limiting / authentication / proxy behaviour).
+- **`CC_FORWARD_AUTH_HEADER`** env var to opt into upstream Authorization forwarding.
+
+### Changed
+- **Library example**: README and `wisegate-core` crate docs now showcase the `DefaultConfig` path instead of the 5-trait implementation snippet.
+- **`ConnectionTracker::track()`**: returns `impl Drop` instead of the concrete `ConnectionGuard`; binary callers only ever depended on the drop side anyway.
+- **Doc**: `request_handler::handle_request` rustdoc now spells out the Tokio runtime requirement, the permissive-mode header-trust caveat, and that strict mode requires both `X-Forwarded-For` and `Forwarded` headers (the `by=` field is what gets matched against the proxy allowlist).
+
+### Refactored
+- **`ip_filter`**: deduplicated the canonical-IP equality path into a private `ips_match` helper and dropped the dead `is_valid_ip_format` wrapper.
+
+---
+
 ## [0.11.0] - 2026-02-19
 
 ### Added
@@ -237,3 +260,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Proxy header validation (strict mode)
 - Environment-based configuration
 - Rust-based high-performance implementation
+
+[0.12.0]: https://github.com/davlgd/wisegate/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/davlgd/wisegate/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/davlgd/wisegate/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/davlgd/wisegate/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/davlgd/wisegate/compare/v0.7.2...v0.8.0
+[0.7.2]: https://github.com/davlgd/wisegate/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/davlgd/wisegate/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/davlgd/wisegate/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/davlgd/wisegate/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/davlgd/wisegate/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/davlgd/wisegate/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/davlgd/wisegate/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/davlgd/wisegate/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/davlgd/wisegate/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/davlgd/wisegate/releases/tag/v0.1.0
