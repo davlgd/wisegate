@@ -52,10 +52,25 @@ use crate::{auth, headers, ip_filter, rate_limiter};
 /// - A successful proxied response from upstream
 /// - An error response (403, 404, 405, 429, 502, etc.)
 ///
+/// # Runtime
+///
+/// This is an async function backed by `reqwest`/`tokio`; it must be awaited
+/// from inside a Tokio runtime (`#[tokio::main]`, `Runtime::block_on`, etc.).
+///
 /// # Security
 ///
-/// In strict mode (when proxy allowlist is configured), requests
-/// without valid proxy headers are rejected with 403 Forbidden.
+/// * **Strict mode** (proxy allowlist configured): requests without a valid
+///   `Forwarded` header chain are rejected with `400 Bad Request`.
+/// * **Permissive mode** (no allowlist): if a request supplies an
+///   `X-Forwarded-For` or `Forwarded` header, the parsed IP is trusted as the
+///   real client IP and re-emitted to the upstream as `X-Real-IP`. An
+///   attacker can spoof this value by sending fake headers — only enable
+///   permissive mode when the proxy sits behind another layer that strips or
+///   normalises these headers.
+/// * Any client-supplied `X-Real-IP` header is stripped before processing.
+/// * The `Authorization` header is stripped before forwarding whenever
+///   wisegate performed authentication (see
+///   [`AuthenticationProvider::forward_authorization_header`]).
 pub async fn handle_request<C: ConfigProvider>(
     req: Request<Incoming>,
     forward_host: Arc<str>,
