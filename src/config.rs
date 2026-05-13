@@ -595,7 +595,14 @@ pub fn get_forward_auth_header() -> bool {
 }
 
 fn compute_forward_auth_header() -> bool {
-    env::var(env_vars::CC_FORWARD_AUTH_HEADER)
+    compute_forward_auth_header_internal(|key| env::var(key))
+}
+
+fn compute_forward_auth_header_internal<F>(env_var: F) -> bool
+where
+    F: Fn(&str) -> Result<String, std::env::VarError>,
+{
+    env_var(env_vars::CC_FORWARD_AUTH_HEADER)
         .ok()
         .map(|s| {
             let v = s.trim().to_ascii_lowercase();
@@ -955,5 +962,131 @@ mod tests {
         assert!(config.blocked_ips().is_empty());
         assert!(config.blocked_methods().is_empty());
         assert!(config.blocked_patterns().is_empty());
+    }
+
+    // ===========================================
+    // compute_forward_auth_header tests
+    // ===========================================
+
+    fn forward_auth_header_with(value: Option<&str>) -> bool {
+        let mut vars = HashMap::new();
+        if let Some(v) = value {
+            vars.insert(env_vars::CC_FORWARD_AUTH_HEADER, v);
+        }
+        compute_forward_auth_header_internal(create_mock_env(vars))
+    }
+
+    #[test]
+    fn test_forward_auth_header_default_false_when_unset() {
+        assert!(!forward_auth_header_with(None));
+    }
+
+    #[test]
+    fn test_forward_auth_header_truthy_values() {
+        for v in [
+            "1", "true", "yes", "on", "TRUE", "Yes", "ON", " true ", "  1\t",
+        ] {
+            assert!(
+                forward_auth_header_with(Some(v)),
+                "expected `{v}` to be truthy"
+            );
+        }
+    }
+
+    #[test]
+    fn test_forward_auth_header_falsy_values() {
+        for v in [
+            "",
+            " ",
+            "0",
+            "false",
+            "no",
+            "off",
+            "FALSE",
+            "anything-else",
+            "2",
+        ] {
+            assert!(
+                !forward_auth_header_with(Some(v)),
+                "expected `{v}` to be falsy"
+            );
+        }
+    }
+
+    // ===========================================
+    // strip-auth predicate semantics
+    //
+    // The runtime decision in `request_handler::forward_request` is:
+    //     strip_auth = is_auth_enabled() && !forward_authorization_header()
+    // These tests pin that contract directly against `AuthenticationProvider`
+    // so a future change to either flag is caught by the unit test suite.
+    // ===========================================
+
+    use wisegate_core::auth::{Credential, Credentials};
+
+    /// Minimal AuthenticationProvider impl for predicate testing.
+    struct AuthFlags {
+        credentials: Credentials,
+        bearer: Option<String>,
+        forward: bool,
+    }
+
+    impl AuthenticationProvider for AuthFlags {
+        fn auth_credentials(&self) -> &Credentials {
+            &self.credentials
+        }
+        fn auth_realm(&self) -> &str {
+            "test"
+        }
+        fn bearer_token(&self) -> Option<&str> {
+            self.bearer.as_deref()
+        }
+        fn forward_authorization_header(&self) -> bool {
+            self.forward
+        }
+    }
+
+    fn strip_auth(cfg: &AuthFlags) -> bool {
+        cfg.is_auth_enabled() && !cfg.forward_authorization_header()
+    }
+
+    #[test]
+    fn test_strip_auth_off_when_no_auth_configured() {
+        let cfg = AuthFlags {
+            credentials: Credentials::new(),
+            bearer: None,
+            forward: false,
+        };
+        assert!(!strip_auth(&cfg));
+    }
+
+    #[test]
+    fn test_strip_auth_on_when_basic_auth_enabled_and_forward_off() {
+        let cfg = AuthFlags {
+            credentials: Credentials::from_entries(vec![Credential::new("u".into(), "p".into())]),
+            bearer: None,
+            forward: false,
+        };
+        assert!(strip_auth(&cfg));
+    }
+
+    #[test]
+    fn test_strip_auth_off_when_forward_opted_in() {
+        let cfg = AuthFlags {
+            credentials: Credentials::from_entries(vec![Credential::new("u".into(), "p".into())]),
+            bearer: None,
+            forward: true,
+        };
+        assert!(!strip_auth(&cfg));
+    }
+
+    #[test]
+    fn test_strip_auth_on_when_bearer_enabled_and_forward_off() {
+        let cfg = AuthFlags {
+            credentials: Credentials::new(),
+            bearer: Some("token".into()),
+            forward: false,
+        };
+        assert!(strip_auth(&cfg));
     }
 }
