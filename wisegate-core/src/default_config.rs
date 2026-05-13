@@ -158,7 +158,10 @@ mod tests {
     #[test]
     fn default_values_match_cli_defaults() {
         let config = DefaultConfig::default();
-        assert_eq!(config.rate_limit.max_requests, defaults::RATE_LIMIT_REQUESTS);
+        assert_eq!(
+            config.rate_limit.max_requests,
+            defaults::RATE_LIMIT_REQUESTS
+        );
         assert_eq!(config.max_connections, defaults::MAX_CONNECTIONS);
         assert!(config.allowed_proxy_ips.is_none());
         assert!(!config.forward_authorization_header);
