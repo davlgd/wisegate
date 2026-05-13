@@ -225,12 +225,6 @@ fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
     parse_canonical_ip(value)
 }
 
-/// Validates IP address format using std::net::IpAddr parsing
-/// Supports both IPv4 and IPv6 addresses, including bracketed IPv6 (e.g., [::1])
-fn is_valid_ip_format(ip: &str) -> bool {
-    parse_canonical_ip(ip).is_some()
-}
-
 /// Parses an IP address and returns its canonical string form.
 ///
 /// Two equivalent IPv6 representations (e.g. `2001:db8::1` and
@@ -288,54 +282,70 @@ mod tests {
     }
 
     // ===========================================
-    // is_valid_ip_format tests
+    // parse_canonical_ip tests
     // ===========================================
 
     #[test]
-    fn test_is_valid_ip_format_ipv4() {
-        assert!(is_valid_ip_format("192.168.1.1"));
-        assert!(is_valid_ip_format("10.0.0.1"));
-        assert!(is_valid_ip_format("127.0.0.1"));
-        assert!(is_valid_ip_format("0.0.0.0"));
-        assert!(is_valid_ip_format("255.255.255.255"));
+    fn test_parse_canonical_ip_ipv4() {
+        assert_eq!(
+            parse_canonical_ip("192.168.1.1").as_deref(),
+            Some("192.168.1.1")
+        );
+        assert_eq!(parse_canonical_ip("10.0.0.1").as_deref(), Some("10.0.0.1"));
+        assert_eq!(
+            parse_canonical_ip("127.0.0.1").as_deref(),
+            Some("127.0.0.1")
+        );
+        assert_eq!(parse_canonical_ip("0.0.0.0").as_deref(), Some("0.0.0.0"));
+        assert_eq!(
+            parse_canonical_ip("255.255.255.255").as_deref(),
+            Some("255.255.255.255")
+        );
     }
 
     #[test]
-    fn test_is_valid_ip_format_ipv4_invalid() {
-        assert!(!is_valid_ip_format("256.1.1.1"));
-        assert!(!is_valid_ip_format("192.168.1"));
-        assert!(!is_valid_ip_format("192.168.1.1.1"));
-        assert!(!is_valid_ip_format("abc.def.ghi.jkl"));
-        assert!(!is_valid_ip_format("192.168.1.1:8080")); // Port not allowed
+    fn test_parse_canonical_ip_ipv4_invalid() {
+        assert!(parse_canonical_ip("256.1.1.1").is_none());
+        assert!(parse_canonical_ip("192.168.1").is_none());
+        assert!(parse_canonical_ip("192.168.1.1.1").is_none());
+        assert!(parse_canonical_ip("abc.def.ghi.jkl").is_none());
+        assert!(parse_canonical_ip("192.168.1.1:8080").is_none()); // Port not allowed
     }
 
     #[test]
-    fn test_is_valid_ip_format_ipv6() {
-        assert!(is_valid_ip_format("::1"));
-        assert!(is_valid_ip_format("2001:db8::1"));
-        assert!(is_valid_ip_format("fe80::1"));
-        assert!(is_valid_ip_format("::ffff:192.168.1.1"));
-        assert!(is_valid_ip_format(
-            "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
-        ));
+    fn test_parse_canonical_ip_ipv6() {
+        assert_eq!(parse_canonical_ip("::1").as_deref(), Some("::1"));
+        assert_eq!(
+            parse_canonical_ip("2001:db8::1").as_deref(),
+            Some("2001:db8::1")
+        );
+        assert_eq!(parse_canonical_ip("fe80::1").as_deref(), Some("fe80::1"));
+        // RFC 5952 canonical form: zero compression collapses long forms.
+        assert_eq!(
+            parse_canonical_ip("2001:0db8:85a3:0000:0000:8a2e:0370:7334").as_deref(),
+            Some("2001:db8:85a3::8a2e:370:7334"),
+        );
     }
 
     #[test]
-    fn test_is_valid_ip_format_ipv6_bracketed() {
-        assert!(is_valid_ip_format("[::1]"));
-        assert!(is_valid_ip_format("[2001:db8::1]"));
+    fn test_parse_canonical_ip_ipv6_bracketed() {
+        assert_eq!(parse_canonical_ip("[::1]").as_deref(), Some("::1"));
+        assert_eq!(
+            parse_canonical_ip("[2001:db8::1]").as_deref(),
+            Some("2001:db8::1")
+        );
     }
 
     #[test]
-    fn test_is_valid_ip_format_empty() {
-        assert!(!is_valid_ip_format(""));
+    fn test_parse_canonical_ip_empty() {
+        assert!(parse_canonical_ip("").is_none());
     }
 
     #[test]
-    fn test_is_valid_ip_format_garbage() {
-        assert!(!is_valid_ip_format("not-an-ip"));
-        assert!(!is_valid_ip_format("unknown"));
-        assert!(!is_valid_ip_format("_secret"));
+    fn test_parse_canonical_ip_garbage() {
+        assert!(parse_canonical_ip("not-an-ip").is_none());
+        assert!(parse_canonical_ip("unknown").is_none());
+        assert!(parse_canonical_ip("_secret").is_none());
     }
 
     // ===========================================
