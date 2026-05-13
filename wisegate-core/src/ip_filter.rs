@@ -169,8 +169,8 @@ fn extract_client_ip_from_xff(xff: &str) -> Option<String> {
     xff.split(',')
         .map(|ip| ip.trim())
         .filter(|ip| !ip.is_empty())
-        .rfind(|ip| is_valid_ip_format(ip))
-        .map(|ip| ip.to_string())
+        .rev()
+        .find_map(parse_canonical_ip)
 }
 
 /// Extract client IP from forwarded header 'for=' field (RFC 7239 compliant)
@@ -188,7 +188,6 @@ fn extract_client_ip_from_forwarded(forwarded: &str) -> Option<String> {
                 .find_map(|param| param.trim().strip_prefix("for="))
         })
         .and_then(extract_ip_from_node_identifier)
-        .filter(|ip| is_valid_ip_format(ip))
 }
 
 /// Extract IP address from RFC 7239 node identifier
@@ -206,13 +205,9 @@ fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
 
     // Handle bracketed IPv6 addresses: [IPv6] or [IPv6]:port
     if value.starts_with('[') {
-        if let Some(bracket_end) = value.find(']') {
-            let ipv6 = &value[1..bracket_end];
-            if is_valid_ip_format(ipv6) {
-                return Some(ipv6.to_string());
-            }
-        }
-        return None;
+        return value
+            .find(']')
+            .and_then(|bracket_end| parse_canonical_ip(&value[1..bracket_end]));
     }
 
     // Handle IPv4 with optional port: IP or IP:port
@@ -221,36 +216,38 @@ fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
 
     if colon_count == 1 {
         // IPv4 with port: "192.168.1.1:8080"
-        if let Some(colon_pos) = value.find(':') {
-            let ip = &value[..colon_pos];
-            if is_valid_ip_format(ip) {
-                return Some(ip.to_string());
-            }
-        }
-        return None;
+        return value
+            .find(':')
+            .and_then(|colon_pos| parse_canonical_ip(&value[..colon_pos]));
     }
 
     // Plain IPv4 or unbracketed IPv6
-    if is_valid_ip_format(value) {
-        return Some(value.to_string());
-    }
-
-    None
+    parse_canonical_ip(value)
 }
 
 /// Validates IP address format using std::net::IpAddr parsing
 /// Supports both IPv4 and IPv6 addresses, including bracketed IPv6 (e.g., [::1])
 fn is_valid_ip_format(ip: &str) -> bool {
+    parse_canonical_ip(ip).is_some()
+}
+
+/// Parses an IP address and returns its canonical string form.
+///
+/// Two equivalent IPv6 representations (e.g. `2001:db8::1` and
+/// `2001:0db8:0000:0000:0000:0000:0000:0001`) produce the same canonical
+/// string (RFC 5952), which prevents bypassing per-IP rate limiting by
+/// alternating address formats.
+fn parse_canonical_ip(ip: &str) -> Option<String> {
     use std::net::IpAddr;
 
     if ip.is_empty() {
-        return false;
+        return None;
     }
 
     // Handle bracketed IPv6 addresses (e.g., [::1])
     let ip_to_parse = ip.trim_start_matches('[').trim_end_matches(']');
 
-    ip_to_parse.parse::<IpAddr>().is_ok()
+    ip_to_parse.parse::<IpAddr>().ok().map(|a| a.to_string())
 }
 
 #[cfg(test)]
@@ -448,6 +445,24 @@ mod tests {
         assert_eq!(
             extract_client_ip_from_xff("10.0.0.1, 172.16.0.1, 192.168.1.1"),
             Some("192.168.1.1".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_canonicalizes_ipv6_forms() {
+        // RFC 5952: zero-compressed form is canonical, so an attacker cannot
+        // bypass per-IP rate limiting by sending the same address spelled out.
+        assert_eq!(
+            extract_client_ip_from_xff("2001:0db8:0000:0000:0000:0000:0000:0001"),
+            Some("2001:db8::1".to_string())
+        );
+        assert_eq!(
+            extract_client_ip_from_xff("2001:db8::1"),
+            Some("2001:db8::1".to_string())
+        );
+        assert_eq!(
+            extract_ip_from_node_identifier("[2001:0db8:0000:0000:0000:0000:0000:0001]:8080"),
+            Some("2001:db8::1".to_string())
         );
     }
 
