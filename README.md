@@ -249,7 +249,10 @@ use wisegate_core::{DefaultConfig, RateLimiter, request_handler};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Arc::new(DefaultConfig::default());
     let limiter = RateLimiter::new();
-    let http_client = reqwest::Client::new();
+    // Disable redirects: wisegate must relay 3xx responses, not follow them
+    let http_client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
     // Use `request_handler::handle_request(req, ...)` inside your hyper service.
     Ok(())
 }

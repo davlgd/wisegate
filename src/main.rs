@@ -81,8 +81,15 @@ async fn main() {
     let http_client = reqwest::Client::builder()
         .timeout(env_config.proxy_config().timeout)
         .pool_max_idle_per_host(32)
+        // A reverse proxy relays 3xx responses to the client. Following them
+        // would serve a target that never went through wisegate's filters.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+        .unwrap_or_else(|err| {
+            // No silent fallback: a default client would follow redirects.
+            error!(error = %err, "Failed to build HTTP client");
+            std::process::exit(1);
+        });
 
     // Create socket address (IP already validated)
     let bind_addr = SocketAddr::from((bind_ip, args.listen));

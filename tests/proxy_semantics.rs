@@ -183,3 +183,21 @@ fn real_ip_survives_connection_nomination() {
     assert!(request.contains("x-real-ip: 198.51.100.7\r\n"), "{request}");
     assert!(!request.contains("203.0.113.66"), "{request}");
 }
+
+#[test]
+#[ignore = "starts the real binary and binds loopback sockets"]
+fn upstream_redirects_are_returned_not_followed() {
+    let backend = Backend::start();
+    let proxy = Proxy::start(&backend, &[("BLOCKED_PATTERNS", "admin")]);
+    let response = proxy.send("/redirect", "");
+    assert!(response.starts_with("http/1.1 302"), "{response}");
+    assert!(response.contains("location: /admin\r\n"), "{response}");
+    assert!(backend.next_request().starts_with("get /redirect "));
+    assert!(
+        backend
+            .requests
+            .recv_timeout(Duration::from_millis(300))
+            .is_err(),
+        "wisegate followed the redirect"
+    );
+}
