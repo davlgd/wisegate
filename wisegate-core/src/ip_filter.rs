@@ -215,6 +215,12 @@ fn is_valid_forwarded_value(value: &str) -> bool {
 }
 
 /// Last element of a Forwarded header: the one added by the closest proxy.
+///
+/// This deliberately supports a subset of RFC 7239: the element is whatever
+/// follows the last `,`, so a proxy whose own element contains a comma inside
+/// a quoted extension is not supported (the element then fails validation
+/// and the request is rejected). A full tokenizer would let an unterminated
+/// quote in a client-supplied earlier element swallow the proxy's element.
 fn last_forwarded_element(forwarded: &str) -> &str {
     forwarded.rsplit(',').next().unwrap_or(forwarded)
 }
@@ -315,8 +321,11 @@ fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
             .and_then(|_| parse_canonical_ip(ip));
     }
 
-    // Plain IPv4 or unbracketed IPv6
-    parse_canonical_ip(value)
+    // Plain IPv4 or unbracketed IPv6: parsed as-is, no bracket trimming
+    value
+        .parse::<IpAddr>()
+        .ok()
+        .map(|a| a.to_canonical().to_string())
 }
 
 /// RFC 7239 node-port: a decimal port number or an obfuscated `_token`.
@@ -832,6 +841,18 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_and_validate_real_ip_strict_by_may_differ_from_peer() {
+        // Design choice: peer and by= must both be allowlisted, not equal. A
+        // multi-homed load balancer may connect from another address than
+        // the one it announces in by=.
+        let config = TestConfig::strict(vec![PROXY, "10.0.0.2"]);
+        let headers = headers_from(&[("forwarded", "for=192.168.1.100;by=10.0.0.2")]);
+
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
     fn test_extract_and_validate_real_ip_strict_proxy_not_allowed() {
         let config = TestConfig::strict(vec![PROXY]);
         let headers = headers_from(&[("forwarded", "for=192.168.1.100;by=10.0.0.2")]);
@@ -980,6 +1001,8 @@ mod tests {
             "for=\"[2001:db8::1]garbage\";by=10.0.0.1",
             "for=\"[198.51.100.7]\";by=10.0.0.1",
             "for=198.51.100.7;by=10.0.0.1;novalue",
+            "for=198.51.100.7];by=10.0.0.1",
+            "for=2001:db8::1]];by=10.0.0.1",
         ] {
             let headers = headers_from(&[("forwarded", value)]);
             assert_eq!(
