@@ -206,7 +206,13 @@ async fn forward_request(
         return Ok(create_body_error_response(&err));
     }
 
-    let body_bytes = match collect_request_body(body, proxy_config.max_body_size).await {
+    let body_bytes = match read_request_body(
+        body,
+        proxy_config.max_body_size,
+        config.client_body_timeout(),
+    )
+    .await
+    {
         Ok(bytes) => bytes,
         Err(err) => {
             return Ok(create_body_error_response(&err));
@@ -215,6 +221,20 @@ async fn forward_request(
 
     let strip_auth = config.is_auth_enabled() && !config.forward_authorization_header();
     forward_with_reqwest(parts, body_bytes, host, port, http_client, strip_auth).await
+}
+
+async fn read_request_body<B>(
+    body: B,
+    max_size: usize,
+    timeout: std::time::Duration,
+) -> Result<bytes::Bytes, WiseGateError>
+where
+    B: hyper::body::Body<Data = bytes::Bytes> + Unpin,
+    B::Error: std::fmt::Display,
+{
+    tokio::time::timeout(timeout, collect_request_body(body, max_size))
+        .await
+        .map_err(|_| WiseGateError::ClientBodyTimeout)?
 }
 
 fn create_body_error_response(err: &WiseGateError) -> Response<Full<bytes::Bytes>> {
@@ -535,6 +555,25 @@ mod tests {
                     .unwrap();
             assert_eq!(result.as_ref(), b"abcdef");
         }
+    }
+
+    #[tokio::test]
+    async fn unfinished_body_times_out_and_closes_connection() {
+        use futures::stream;
+        use hyper::body::Frame;
+
+        let stream = stream::pending::<Result<Frame<bytes::Bytes>, Infallible>>();
+        let err = read_request_body(
+            http_body_util::StreamBody::new(stream),
+            0,
+            std::time::Duration::from_millis(1),
+        )
+        .await
+        .unwrap_err();
+        let response = create_body_error_response(&err);
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(response.headers()[headers::CONNECTION], "close");
+        assert!(!err.is_server_error());
     }
 
     // ===========================================

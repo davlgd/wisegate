@@ -5,7 +5,7 @@
 use clap::Parser;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioIo, TokioTimer};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -160,7 +160,10 @@ async fn main() {
                         request_handler::handle_request(req, addr, forward_host.clone(), forward_port, limiter.clone(), config.clone(), client.clone())
                     });
 
-                    if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
+                    if let Err(err) = http1::Builder::new()
+                        .timer(TokioTimer::new())
+                        .header_read_timeout(wisegate::config::get_client_header_timeout())
+                        .serve_connection(io, service).await {
                         warn!(client = %addr, error = %err, "Connection error");
                     }
                 });

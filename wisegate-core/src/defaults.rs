@@ -30,6 +30,15 @@ pub const PROXY_TIMEOUT_SECS: u64 = 30;
 /// Default proxy timeout duration.
 pub const PROXY_TIMEOUT: Duration = Duration::from_secs(PROXY_TIMEOUT_SECS);
 
+/// Maximum time to receive a complete set of client request headers.
+pub const CLIENT_HEADER_TIMEOUT_SECS: u64 = 30;
+
+/// Maximum time to receive the complete client request body.
+pub const CLIENT_BODY_TIMEOUT_SECS: u64 = 30;
+
+/// Default client body deadline, independent of the upstream timeout.
+pub const CLIENT_BODY_TIMEOUT: Duration = Duration::from_secs(CLIENT_BODY_TIMEOUT_SECS);
+
 /// Default maximum body size in megabytes.
 pub const MAX_BODY_SIZE_MB: usize = 100;
 

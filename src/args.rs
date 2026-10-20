@@ -44,6 +44,8 @@ const AFTER_HELP: &str = "Environment variables:
 
   Proxy behaviour:
     PROXY_TIMEOUT_SECS                 Upstream request timeout    (default: 30)
+    CLIENT_HEADER_TIMEOUT_SECS         Client header deadline      (default: 30)
+    CLIENT_BODY_TIMEOUT_SECS           Client body deadline        (default: 30)
     MAX_BODY_SIZE_MB                   Max body size in MB         (default: 100, 0=unlimited)
     MAX_CONNECTIONS                    Max concurrent connections  (default: 10000, 0=unlimited)
 

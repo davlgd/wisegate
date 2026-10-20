@@ -170,6 +170,14 @@ pub const TRUST_LOOPBACK_PROXY: &str = "TRUST_LOOPBACK_PROXY";
 /// **Example**: `"60"`
 pub const PROXY_TIMEOUT_SECS: &str = "PROXY_TIMEOUT_SECS";
 
+/// Total client header read deadline in seconds (default 30).
+/// Zero and invalid values fall back to the default; they do not disable it.
+pub const CLIENT_HEADER_TIMEOUT_SECS: &str = "CLIENT_HEADER_TIMEOUT_SECS";
+
+/// Total client body read deadline in seconds (default 30).
+/// Independent of PROXY_TIMEOUT_SECS. Zero and invalid values use the default.
+pub const CLIENT_BODY_TIMEOUT_SECS: &str = "CLIENT_BODY_TIMEOUT_SECS";
+
 /// Maximum request body size in megabytes.
 ///
 /// Set to `0` for unlimited size.
@@ -224,6 +232,8 @@ pub fn all_env_vars() -> &'static [&'static str] {
         CC_BEARER_TOKEN,
         CC_FORWARD_AUTH_HEADER,
         PROXY_TIMEOUT_SECS,
+        CLIENT_HEADER_TIMEOUT_SECS,
+        CLIENT_BODY_TIMEOUT_SECS,
         MAX_BODY_SIZE_MB,
         MAX_CONNECTIONS,
     ]

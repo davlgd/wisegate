@@ -73,6 +73,10 @@ pub enum WiseGateError {
     #[error("Body read error: {0}")]
     BodyReadError(String),
 
+    /// The client did not finish sending its body before the deadline.
+    #[error("Client request body timed out")]
+    ClientBodyTimeout,
+
     /// HTTP client error (from reqwest).
     #[error("HTTP client error: {0}")]
     HttpClientError(#[from] reqwest::Error),
@@ -99,6 +103,7 @@ impl WiseGateError {
             Self::UpstreamTimeout(_) => StatusCode::GATEWAY_TIMEOUT,
             Self::BodyTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
             Self::BodyReadError(_) => StatusCode::BAD_REQUEST,
+            Self::ClientBodyTimeout => StatusCode::REQUEST_TIMEOUT,
             Self::HttpClientError(_) => StatusCode::BAD_GATEWAY,
         }
     }
@@ -120,6 +125,7 @@ impl WiseGateError {
             Self::UpstreamTimeout(_) => "Gateway timeout",
             Self::BodyTooLarge { .. } => "Request body too large",
             Self::BodyReadError(_) => "Bad request",
+            Self::ClientBodyTimeout => "Request timeout",
             Self::HttpClientError(_) => "Bad gateway",
         }
     }

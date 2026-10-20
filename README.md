@@ -60,12 +60,21 @@ All configuration via environment variables:
 | `RATE_LIMIT_CLEANUP_THRESHOLD` | `10000` | Entries before auto-cleanup (0 = disabled) |
 | `RATE_LIMIT_CLEANUP_INTERVAL_SECS` | `60` | Min interval between cleanups in seconds |
 | `PROXY_TIMEOUT_SECS` | `30` | Upstream request timeout |
+| `CLIENT_HEADER_TIMEOUT_SECS` | `30` | Total time to receive client request headers; must be positive |
+| `CLIENT_BODY_TIMEOUT_SECS` | `30` | Total time to receive the client body; must be positive |
 | `MAX_BODY_SIZE_MB` | `100` | Max body size (0 = unlimited) |
 | `MAX_CONNECTIONS` | `10000` | Max concurrent connections (0 = unlimited) |
 | `CC_HTTP_BASIC_AUTH` | - | Basic auth credentials (username:password) |
 | `CC_HTTP_BASIC_AUTH_N` | - | Additional credentials (_1, _2, etc.) |
 | `CC_HTTP_BASIC_AUTH_REALM` | `WiseGate` | Authentication realm |
 | `CC_BEARER_TOKEN` | - | Bearer token for API authentication |
+
+Client read deadlines are independent of the upstream timeout. Incomplete headers
+close the connection when the deadline expires; an incomplete body returns 408
+and closes the connection. Zero or invalid client timeout values fall back to
+30 seconds. Increase the body deadline explicitly for large or slow uploads.
+The body size limit is enforced during reading, including chunked requests;
+`MAX_BODY_SIZE_MB=0` disables the size limit but keeps the body deadline.
 
 ### 📋 Example Configuration
 

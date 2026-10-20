@@ -47,6 +47,18 @@ static RATE_LIMIT_CONFIG: LazyLock<RateLimitConfig> = LazyLock::new(compute_rate
 static RATE_LIMIT_CLEANUP_CONFIG: LazyLock<RateLimitCleanupConfig> =
     LazyLock::new(compute_rate_limit_cleanup_config);
 static PROXY_CONFIG: LazyLock<ProxyConfig> = LazyLock::new(compute_proxy_config);
+static CLIENT_HEADER_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
+    read_client_timeout(
+        env_vars::CLIENT_HEADER_TIMEOUT_SECS,
+        defaults::CLIENT_HEADER_TIMEOUT_SECS,
+    )
+});
+static CLIENT_BODY_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
+    read_client_timeout(
+        env_vars::CLIENT_BODY_TIMEOUT_SECS,
+        defaults::CLIENT_BODY_TIMEOUT_SECS,
+    )
+});
 static BLOCKED_IPS: LazyLock<Vec<String>> = LazyLock::new(compute_blocked_ips);
 static BLOCKED_PATTERNS: LazyLock<Vec<String>> = LazyLock::new(compute_blocked_patterns);
 static BLOCKED_METHODS: LazyLock<Vec<String>> = LazyLock::new(compute_blocked_methods);
@@ -135,6 +147,29 @@ fn parse_comma_separated_uppercase(input: &str) -> Vec<String> {
 // ============================================================================
 // Public Configuration Getters
 // ============================================================================
+
+fn read_client_timeout(name: &str, default: u64) -> Duration {
+    let seconds = parse_env_var_or_default(name, default);
+    if seconds == 0 {
+        warn!(
+            variable = name,
+            "Client timeout must be positive; using default"
+        );
+        Duration::from_secs(default)
+    } else {
+        Duration::from_secs(seconds)
+    }
+}
+
+/// Returns the total deadline for receiving client request headers.
+pub fn get_client_header_timeout() -> Duration {
+    *CLIENT_HEADER_TIMEOUT
+}
+
+/// Returns the total deadline for receiving a client request body.
+pub fn get_client_body_timeout() -> Duration {
+    *CLIENT_BODY_TIMEOUT
+}
 
 /// Returns the cached rate limiting configuration.
 ///
@@ -690,6 +725,10 @@ impl RateLimitingProvider for EnvVarConfig {
 impl ProxyProvider for EnvVarConfig {
     fn proxy_config(&self) -> &ProxyConfig {
         get_proxy_config()
+    }
+
+    fn client_body_timeout(&self) -> Duration {
+        get_client_body_timeout()
     }
 
     fn allowed_proxy_ips(&self) -> Option<&[String]> {

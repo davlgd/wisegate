@@ -32,6 +32,12 @@ pub trait ProxyProvider: Send + Sync {
     /// Returns the proxy configuration.
     fn proxy_config(&self) -> &ProxyConfig;
 
+    /// Total deadline for reading the client body, separate from upstream I/O.
+    /// Existing implementations receive a 30-second deadline by default.
+    fn client_body_timeout(&self) -> Duration {
+        crate::defaults::CLIENT_BODY_TIMEOUT
+    }
+
     /// Returns the list of allowed proxy IPs, if configured.
     /// When `Some`, strict mode is enabled. When `None`, permissive mode is used.
     fn allowed_proxy_ips(&self) -> Option<&[String]>;
