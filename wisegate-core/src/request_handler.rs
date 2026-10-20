@@ -16,7 +16,10 @@
 //! # Connection Pooling
 //!
 //! The module accepts a shared [`reqwest::Client`] for HTTP connection pooling,
-//! which should be configured by the caller with appropriate timeouts.
+//! which should be configured by the caller with appropriate timeouts and with
+//! redirects disabled (`.redirect(reqwest::redirect::Policy::none())`):
+//! reqwest follows up to 10 redirects by default, which would serve targets
+//! that never went through wisegate's filters.
 
 use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, StatusCode, body::Incoming};
@@ -170,19 +173,12 @@ pub async fn handle_request<C: ConfigProvider>(
         }
     }
 
-    // Strip any client-supplied X-Real-IP first to prevent spoofing, then insert
-    // the validated one (if any) so upstream sees only wisegate's value.
-    let mut req = req;
-    req.headers_mut().remove(headers::X_REAL_IP);
-    if let Some(ref ip) = real_client_ip
-        && let Ok(header_value) = ip.parse()
-    {
-        req.headers_mut().insert(headers::X_REAL_IP, header_value);
-    }
-
-    // Forward the request
+    // Forward the request. Any client-supplied X-Real-IP is dropped and the
+    // validated one (if any) is added after hop-by-hop filtering, so upstream
+    // sees only wisegate's value.
     forward_request(
         req,
+        real_client_ip.as_deref(),
         &forward_host,
         forward_port,
         config.as_ref(),
@@ -194,6 +190,7 @@ pub async fn handle_request<C: ConfigProvider>(
 /// Forward request to upstream service
 async fn forward_request(
     req: Request<Incoming>,
+    real_client_ip: Option<&str>,
     host: &str,
     port: u16,
     config: &impl ConfigProvider,
@@ -232,7 +229,16 @@ async fn forward_request(
     };
 
     let strip_auth = config.is_auth_enabled() && !config.forward_authorization_header();
-    forward_with_reqwest(parts, body_bytes, host, port, http_client, strip_auth).await
+    forward_with_reqwest(
+        parts,
+        body_bytes,
+        real_client_ip,
+        host,
+        port,
+        http_client,
+        strip_auth,
+    )
+    .await
 }
 
 async fn read_request_body<B>(
@@ -290,6 +296,7 @@ where
 async fn forward_with_reqwest(
     parts: hyper::http::request::Parts,
     body_bytes: bytes::Bytes,
+    real_client_ip: Option<&str>,
     host: &str,
     port: u16,
     client: &reqwest::Client,
@@ -314,18 +321,24 @@ async fn forward_with_reqwest(
     };
     let mut req_builder = client.request(method, &destination_uri);
 
-    // Add headers (excluding host, content-length, and hop-by-hop headers per RFC 7230).
+    // Add headers (excluding host, content-length, and hop-by-hop headers per
+    // RFC 9110 section 7.6.1, including those nominated by `Connection`).
     // When `strip_auth` is set, also drop Authorization so the upstream cannot
     // re-validate or log credentials wisegate just consumed.
+    let nominated = headers::connection_nominated(&parts.headers);
     for (name, value) in parts.headers.iter() {
         if name != headers::HOST
             && name != headers::CONTENT_LENGTH
+            && name != headers::X_REAL_IP
             && !(strip_auth && name == headers::AUTHORIZATION)
-            && !headers::is_hop_by_hop(name.as_str())
+            && !headers::is_hop_by_hop_for(name.as_str(), &nominated)
             && let Ok(header_value) = value.to_str()
         {
             req_builder = req_builder.header(name.as_str(), header_value);
         }
+    }
+    if let Some(ip) = real_client_ip {
+        req_builder = req_builder.header(headers::X_REAL_IP, ip);
     }
 
     // Add body if not empty
@@ -358,16 +371,17 @@ async fn forward_with_reqwest(
                         }
                     };
 
-                    // Copy response headers (skip hop-by-hop headers)
+                    // Copy response headers, skipping hop-by-hop ones. `append`
+                    // keeps every value of repeated fields such as Set-Cookie.
+                    let nominated = headers::connection_nominated(&resp_headers);
                     for (name, value) in resp_headers.iter() {
-                        // Skip hop-by-hop headers that shouldn't be forwarded
-                        if !headers::is_hop_by_hop(name.as_str())
+                        if !headers::is_hop_by_hop_for(name.as_str(), &nominated)
                             && let (Ok(hyper_name), Ok(hyper_value)) = (
                                 hyper::header::HeaderName::from_bytes(name.as_str().as_bytes()),
                                 hyper::header::HeaderValue::from_bytes(value.as_bytes()),
                             )
                         {
-                            hyper_response.headers_mut().insert(hyper_name, hyper_value);
+                            hyper_response.headers_mut().append(hyper_name, hyper_value);
                         }
                     }
 

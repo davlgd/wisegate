@@ -42,7 +42,12 @@ pub const PROXY_AUTHORIZATION: &str = "proxy-authorization";
 /// TE header (hop-by-hop).
 pub const TE: &str = "te";
 
-/// Trailers header (hop-by-hop).
+/// Trailer header (hop-by-hop, RFC 9110 section 7.6.1).
+pub const TRAILER: &str = "trailer";
+
+/// Former, misspelled name of [`TRAILER`]. `trailers` is a `TE` token, not a
+/// header field, so matching it never removed the `Trailer` header.
+#[deprecated(since = "0.13.0", note = "use `TRAILER`; the header is `Trailer`")]
 pub const TRAILERS: &str = "trailers";
 
 /// Transfer-Encoding header (hop-by-hop).
@@ -58,7 +63,7 @@ pub const HOP_BY_HOP_HEADERS: &[&str] = &[
     PROXY_AUTHENTICATE,
     PROXY_AUTHORIZATION,
     TE,
-    TRAILERS,
+    TRAILER,
     TRANSFER_ENCODING,
     UPGRADE,
 ];
@@ -90,6 +95,42 @@ pub fn is_hop_by_hop(header_name: &str) -> bool {
         .any(|h| h.eq_ignore_ascii_case(header_name))
 }
 
+/// Returns the header names listed in the `Connection` header(s), lowercased.
+///
+/// RFC 9110 section 7.6.1: a proxy must remove every field named in
+/// `Connection` before forwarding the message, in addition to the fixed
+/// hop-by-hop list.
+///
+/// # Example
+///
+/// ```
+/// use wisegate_core::headers::connection_nominated;
+///
+/// let mut headers = hyper::HeaderMap::new();
+/// headers.insert("connection", "keep-alive, X-Secret".parse().unwrap());
+/// assert_eq!(connection_nominated(&headers), vec!["keep-alive", "x-secret"]);
+/// ```
+pub fn connection_nominated(headers: &hyper::HeaderMap) -> Vec<String> {
+    headers
+        .get_all(CONNECTION)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .map(|token| token.trim().to_ascii_lowercase())
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+/// Returns `true` if a header must not be forwarded: either a fixed
+/// hop-by-hop header or one nominated by `Connection` (see
+/// [`connection_nominated`]).
+pub fn is_hop_by_hop_for(header_name: &str, nominated: &[String]) -> bool {
+    is_hop_by_hop(header_name)
+        || nominated
+            .iter()
+            .any(|token| token.eq_ignore_ascii_case(header_name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,9 +142,29 @@ mod tests {
         assert!(is_hop_by_hop(PROXY_AUTHENTICATE));
         assert!(is_hop_by_hop(PROXY_AUTHORIZATION));
         assert!(is_hop_by_hop(TE));
-        assert!(is_hop_by_hop(TRAILERS));
+        assert!(is_hop_by_hop(TRAILER));
+        assert!(is_hop_by_hop("Trailer"));
         assert!(is_hop_by_hop(TRANSFER_ENCODING));
         assert!(is_hop_by_hop(UPGRADE));
+    }
+
+    #[test]
+    fn test_connection_nominated_reads_every_field() {
+        let mut headers = hyper::HeaderMap::new();
+        headers.append(CONNECTION, "close, X-Secret".parse().unwrap());
+        headers.append(CONNECTION, " x-other ,,".parse().unwrap());
+        assert_eq!(
+            connection_nominated(&headers),
+            vec!["close", "x-secret", "x-other"]
+        );
+    }
+
+    #[test]
+    fn test_is_hop_by_hop_for_nominated_headers() {
+        let nominated = vec!["x-secret".to_string()];
+        assert!(is_hop_by_hop_for("X-Secret", &nominated));
+        assert!(is_hop_by_hop_for(UPGRADE, &nominated));
+        assert!(!is_hop_by_hop_for("x-public", &nominated));
     }
 
     #[test]
