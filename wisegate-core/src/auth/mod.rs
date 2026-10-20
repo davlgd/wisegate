@@ -6,6 +6,56 @@
 pub mod hash;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
+use std::sync::{Arc, LazyLock};
+use tokio::sync::Semaphore;
+
+// Process-wide: permissive requests without an attributable IP are also bounded.
+static AUTH_SLOTS: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(4)));
+
+#[derive(Debug)]
+pub(crate) struct AuthCheckUnavailable;
+
+/// Keep password hashing off the async executor, with no unbounded waiting queue.
+pub(crate) async fn check_basic_auth_bounded(
+    auth_header: Option<&str>,
+    credentials: &Credentials,
+) -> Result<bool, AuthCheckUnavailable> {
+    check_basic_auth_with_slots(auth_header, credentials, &AUTH_SLOTS).await
+}
+
+async fn check_basic_auth_with_slots(
+    auth_header: Option<&str>,
+    credentials: &Credentials,
+    slots: &Arc<Semaphore>,
+) -> Result<bool, AuthCheckUnavailable> {
+    if credentials.is_empty() {
+        return Ok(true);
+    }
+    let Some(header) = auth_header.filter(|h| h.starts_with("Basic ")) else {
+        return Ok(false);
+    };
+    let permit = slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| AuthCheckUnavailable)?;
+    let credentials = credentials.clone();
+    let header = header.to_owned();
+    run_auth_check(permit, move || credentials.verify(&header)).await
+}
+
+async fn run_auth_check(
+    permit: tokio::sync::OwnedSemaphorePermit,
+    check: impl FnOnce() -> bool + Send + 'static,
+) -> Result<bool, AuthCheckUnavailable> {
+    tokio::task::spawn_blocking(move || {
+        // Cancellation of the requesting task must not release the slot while
+        // a non-cancellable hash check is still running.
+        let _permit = permit;
+        check()
+    })
+    .await
+    .map_err(|_| AuthCheckUnavailable)
+}
 
 /// A single credential entry (username and password/hash).
 #[derive(Debug, Clone)]
@@ -182,6 +232,75 @@ pub fn check_bearer_token(auth_header: Option<&str>, expected_token: Option<&str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn saturated_auth_rejects_without_waiting() {
+        use futures::FutureExt;
+
+        let slots = Arc::new(Semaphore::new(1));
+        let _permit = slots.clone().try_acquire_owned().unwrap();
+        let credentials = Credentials::from_entries(vec![Credential::new(
+            "admin".to_string(),
+            "secret".to_string(),
+        )]);
+        let header = format!("Basic {}", STANDARD.encode("admin:secret"));
+        assert!(
+            check_basic_auth_with_slots(Some(&header), &credentials, &slots)
+                .now_or_never()
+                .expect("saturated authentication must not queue")
+                .is_err()
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn blocking_auth_keeps_its_slot_after_request_cancellation() {
+        let slots = Arc::new(Semaphore::new(1));
+        let permit = slots.clone().try_acquire_owned().unwrap();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+        let task = tokio::spawn(run_auth_check(permit, move || {
+            started_tx.send(()).unwrap();
+            // Bounded even if a regression makes the assertions below panic.
+            finish_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+            true
+        }));
+
+        // A blocking call on this single-thread executor would prevent progress.
+        started_rx.await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(slots.clone().try_acquire_owned().is_err());
+        finish_tx.send(()).unwrap();
+        let released =
+            tokio::time::timeout(std::time::Duration::from_secs(2), slots.acquire_owned())
+                .await
+                .expect("slot must be released when hashing finishes")
+                .unwrap();
+        drop(released);
+    }
+
+    #[tokio::test]
+    async fn bounded_basic_auth_preserves_valid_and_invalid_credentials() {
+        let credentials = Credentials::from_entries(vec![Credential::new(
+            "admin".to_string(),
+            "secret".to_string(),
+        )]);
+        let valid = format!("Basic {}", STANDARD.encode("admin:secret"));
+        let invalid = format!("Basic {}", STANDARD.encode("admin:wrong"));
+        assert!(
+            check_basic_auth_bounded(Some(&valid), &credentials)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !check_basic_auth_bounded(Some(&invalid), &credentials)
+                .await
+                .unwrap()
+        );
+        assert!(!check_basic_auth_bounded(None, &credentials).await.unwrap());
+    }
 
     #[test]
     fn test_credential_parse_valid() {

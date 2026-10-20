@@ -76,6 +76,15 @@ and closes the connection. Zero or invalid client timeout values fall back to
 The body size limit is enforced during reading, including chunked requests;
 `MAX_BODY_SIZE_MB=0` disables the size limit but keeps the body deadline.
 
+The per-IP request quota is checked before authentication, so rejected credentials
+also consume it; a successful request is charged once. Basic password checks run
+outside the async executor with at most four concurrent checks per process.
+Additional checks receive 503 immediately instead of joining a waiting queue.
+All configured credentials are still checked, preserving the existing handling
+of mixed hash formats and avoiding a new username-dependent shortcut.
+In permissive mode without a client IP, the authentication concurrency limit
+still applies, but the per-IP request quota cannot apply.
+
 ### 📋 Example Configuration
 
 ```bash

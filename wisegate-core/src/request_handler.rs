@@ -128,6 +128,15 @@ pub async fn handle_request<C: ConfigProvider>(
         return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
+    // Count attempts before authentication so failed credentials cannot bypass
+    // the per-IP budget. Successful requests are charged exactly once.
+    if let Some(ref ip) = real_client_ip
+        && !rate_limiter::check_rate_limit(&limiter, ip, config.as_ref()).await
+    {
+        let err = WiseGateError::RateLimitExceeded(ip.clone());
+        return Ok(create_error_response(err.status_code(), err.user_message()));
+    }
+
     // Check Authentication if enabled (Basic Auth and/or Bearer Token)
     // Logic: if both are configured, either one passing is sufficient
     if config.is_auth_enabled() {
@@ -139,8 +148,19 @@ pub async fn handle_request<C: ConfigProvider>(
         let basic_auth_enabled = config.is_basic_auth_enabled();
         let bearer_auth_enabled = config.is_bearer_auth_enabled();
 
-        let basic_auth_passed =
-            basic_auth_enabled && auth::check_basic_auth(auth_header, config.auth_credentials());
+        let basic_auth_passed = if basic_auth_enabled {
+            match auth::check_basic_auth_bounded(auth_header, config.auth_credentials()).await {
+                Ok(passed) => passed,
+                Err(_) => {
+                    return Ok(create_error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Authentication temporarily unavailable",
+                    ));
+                }
+            }
+        } else {
+            false
+        };
         let bearer_auth_passed =
             bearer_auth_enabled && auth::check_bearer_token(auth_header, config.bearer_token());
 
@@ -148,14 +168,6 @@ pub async fn handle_request<C: ConfigProvider>(
         if !basic_auth_passed && !bearer_auth_passed {
             return Ok(create_unauthorized_response(config.auth_realm()));
         }
-    }
-
-    // Apply rate limiting (only when IP is known)
-    if let Some(ref ip) = real_client_ip
-        && !rate_limiter::check_rate_limit(&limiter, ip, config.as_ref()).await
-    {
-        let err = WiseGateError::RateLimitExceeded(ip.clone());
-        return Ok(create_error_response(err.status_code(), err.user_message()));
     }
 
     // Strip any client-supplied X-Real-IP first to prevent spoofing, then insert
