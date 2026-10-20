@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-10-20
+
+### Security
+- **Strict-mode IP spoofing through the load balancer**: wisegate only read the first `X-Forwarded-For` and `Forwarded` header fields, while Sōzu (Clever Cloud) appends to the last one. A client sending two `X-Forwarded-For` fields chose the IP wisegate attributed to it, bypassing the IP blocklist and the rate limiter. Strict mode now reads every `Forwarded` field and trusts only the last element, the one appended by the proxy: its `by=` must be allowlisted and the client IP comes from its `for=`, with no fallback to earlier elements. `X-Forwarded-For` is no longer used in strict mode.
+- **Strict-mode IP spoofing by direct clients**: the proxy allowlist was matched against the client-supplied `by=` only. The TCP peer must now itself be an allowlisted proxy (or a loopback peer, only when `TRUST_LOOPBACK_PROXY` is enabled).
+- **Malformed `Forwarded` elements**: in the identity-bearing element, unbalanced quotes, parameter names that are not tokens, duplicated `for`/`by` parameters, separators hidden in quoted extensions, invalid ports and stray brackets are rejected instead of yielding an identity. wisegate validates the `for`/`by` identities of the proxy's element and rejects ambiguous quoting; complex quoted extensions are not supported. IPv4-mapped IPv6 addresses are normalised to IPv4 for blocklists, allowlists and rate limiting.
+- **Unbounded chunked bodies**: `MAX_BODY_SIZE_MB` was only checked after the whole body was buffered when no `Content-Length` was sent. The limit is now enforced while reading, and the connection is closed on rejection.
+- **Slow clients holding connections**: request headers and bodies now have read deadlines (`CLIENT_HEADER_TIMEOUT_SECS`, `CLIENT_BODY_TIMEOUT_SECS`, 30 s by default); an incomplete body gets `408 Request Timeout`.
+- **Password-check CPU exhaustion**: rate limiting now applies before authentication, so failed attempts consume the per-IP quota, and Basic Auth hash checks run off the async executor with a bounded concurrency (`503` when saturated).
+- **Redirects followed upstream**: the upstream client followed up to 10 redirects, serving targets that never went through wisegate's filters (e.g. a `302` to a blocked path). 3xx responses are now relayed to the client.
+- **Hop-by-hop headers**: headers named in `Connection` are now dropped in both directions as RFC 9110 requires, `Trailer` is filtered (the list had `trailers`), and `X-Real-IP` is added after this cleanup so a client cannot nominate it away.
+
+### Added
+- **`TRUST_LOOPBACK_PROXY`** env var (and `ProxyProvider::trust_loopback_proxy()`): in strict mode, also trust a loopback TCP peer, for chains where another local middleware runs in front of wisegate (e.g. Clever Cloud Request Flow `varnish,custom`). The `by=` must still be allowlisted.
+- **`CLIENT_HEADER_TIMEOUT_SECS`** and **`CLIENT_BODY_TIMEOUT_SECS`** env vars (and `ProxyProvider::client_body_timeout()`).
+- **`headers::connection_nominated()`** and **`headers::is_hop_by_hop_for()`** helpers, and the `headers::TRAILER` constant.
+
+### Changed
+- **Breaking (library)**: `request_handler::handle_request` takes the TCP peer address (`SocketAddr`) as its second argument, and `ip_filter::extract_and_validate_real_ip` takes the peer IP. Library users must also build their `reqwest::Client` with `redirect::Policy::none()`.
+- **Breaking (behaviour)**: strict mode no longer requires nor reads `X-Forwarded-For`; it requires a `Forwarded` element with both `for=` and `by=` from an allowlisted peer, or from an explicitly trusted loopback peer.
+- **Repeated response headers** such as `Set-Cookie` are all forwarded; only the last one was kept.
+- The binary exits if the upstream HTTP client cannot be built, instead of silently falling back to a default client.
+
+### Deprecated
+- `headers::TRAILERS`: use `headers::TRAILER`.
+
+---
+
 ## [0.12.0] - 2026-05-13
 
 ### Security
@@ -261,6 +289,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Environment-based configuration
 - Rust-based high-performance implementation
 
+[0.13.0]: https://github.com/davlgd/wisegate/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/davlgd/wisegate/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/davlgd/wisegate/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/davlgd/wisegate/compare/v0.9.0...v0.10.0

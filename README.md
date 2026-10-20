@@ -223,7 +223,7 @@ WiseGate's core functionality is available as a separate crate `wisegate-core` f
 
 ```toml
 [dependencies]
-wisegate-core = "0.12"
+wisegate-core = "0.13"
 ```
 
 The fastest path is `DefaultConfig` — it implements every configuration trait and exposes plain public fields you can tweak (inside an async function):
