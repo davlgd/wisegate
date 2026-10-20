@@ -71,7 +71,8 @@ impl Default for ConnectionTracker {
 
 /// RAII guard that decrements the connection count on drop.
 ///
-/// Uses saturating subtraction to prevent underflow. Returned opaquely from
+/// Each guard matches exactly one increment, so the decrement cannot
+/// underflow. Returned opaquely from
 /// [`ConnectionTracker::track`] so callers only depend on its `Drop` semantics.
 #[derive(Debug)]
 struct ConnectionGuard {
@@ -80,12 +81,11 @@ struct ConnectionGuard {
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
-        let prev = self
-            .active
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |val| {
-                Some(val.saturating_sub(1))
-            });
-        debug_assert!(prev.is_ok_and(|v| v > 0), "Connection count underflow");
+        // Each guard comes from exactly one `track()` increment, so the
+        // count cannot underflow. `fetch_update` is deprecated on current
+        // stable and its replacement `try_update` would raise the MSRV.
+        let prev = self.active.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(prev > 0, "Connection count underflow");
     }
 }
 

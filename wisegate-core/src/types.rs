@@ -541,7 +541,7 @@ mod tests {
     fn test_proxy_config_max_body_size_mb_1() {
         let config = ProxyConfig {
             timeout: Duration::from_secs(30),
-            max_body_size: 1 * 1024 * 1024,
+            max_body_size: 1024 * 1024,
         };
         assert_eq!(config.max_body_size_mb(), "1");
     }
