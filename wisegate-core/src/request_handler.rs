@@ -203,33 +203,55 @@ async fn forward_request(
             size: content_length,
             max: proxy_config.max_body_size,
         };
-        return Ok(create_error_response(err.status_code(), err.user_message()));
+        return Ok(create_body_error_response(&err));
     }
 
-    let body_bytes = match body.collect().await {
-        Ok(bytes) => {
-            let collected_bytes = bytes.to_bytes();
-
-            // Check actual body size (Content-Length may be absent or inaccurate)
-            if proxy_config.max_body_size > 0 && collected_bytes.len() > proxy_config.max_body_size
-            {
-                let err = WiseGateError::BodyTooLarge {
-                    size: collected_bytes.len(),
-                    max: proxy_config.max_body_size,
-                };
-                return Ok(create_error_response(err.status_code(), err.user_message()));
-            }
-
-            collected_bytes
-        }
-        Err(e) => {
-            let err = WiseGateError::BodyReadError(e.to_string());
-            return Ok(create_error_response(err.status_code(), err.user_message()));
+    let body_bytes = match collect_request_body(body, proxy_config.max_body_size).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return Ok(create_body_error_response(&err));
         }
     };
 
     let strip_auth = config.is_auth_enabled() && !config.forward_authorization_header();
     forward_with_reqwest(parts, body_bytes, host, port, http_client, strip_auth).await
+}
+
+fn create_body_error_response(err: &WiseGateError) -> Response<Full<bytes::Bytes>> {
+    let mut response = create_error_response(err.status_code(), err.user_message());
+    // The unread body must not be reused as a subsequent HTTP/1 request.
+    response.headers_mut().insert(
+        headers::CONNECTION,
+        hyper::header::HeaderValue::from_static("close"),
+    );
+    response
+}
+
+/// Enforce the limit as frames arrive, including when no Content-Length exists.
+/// Reject the first oversized frame before buffering it or waiting for EOF.
+async fn collect_request_body<B>(
+    mut body: B,
+    max_size: usize,
+) -> Result<bytes::Bytes, WiseGateError>
+where
+    B: hyper::body::Body<Data = bytes::Bytes> + Unpin,
+    B::Error: std::fmt::Display,
+{
+    let mut buffer = bytes::BytesMut::new();
+    while let Some(frame) = body.frame().await {
+        let frame = frame.map_err(|err| WiseGateError::BodyReadError(err.to_string()))?;
+        if let Ok(data) = frame.into_data() {
+            let size = buffer.len().saturating_add(data.len());
+            if max_size > 0 && size > max_size {
+                return Err(WiseGateError::BodyTooLarge {
+                    size,
+                    max: max_size,
+                });
+            }
+            buffer.extend_from_slice(&data);
+        }
+    }
+    Ok(buffer.freeze())
 }
 
 /// Shared forwarding logic using reqwest with connection pooling
@@ -483,6 +505,37 @@ mod tests {
     use super::*;
     use crate::test_utils::TestConfig;
     use http_body_util::BodyExt;
+
+    #[tokio::test]
+    async fn body_limit_rejects_chunked_stream_without_waiting_for_eof() {
+        use futures::{FutureExt, StreamExt, stream};
+        use hyper::body::Frame;
+
+        let frames = stream::iter([
+            Ok::<_, Infallible>(Frame::data(bytes::Bytes::from_static(b"abc"))),
+            Ok(Frame::data(bytes::Bytes::from_static(b"def"))),
+        ])
+        .chain(stream::pending());
+        let body = http_body_util::StreamBody::new(frames);
+        let result = collect_request_body(body, 5)
+            .now_or_never()
+            .expect("must reject before the stream ends");
+        assert!(matches!(
+            result,
+            Err(WiseGateError::BodyTooLarge { size: 6, max: 5 })
+        ));
+    }
+
+    #[tokio::test]
+    async fn body_limit_accepts_exact_limit_and_zero_remains_unlimited() {
+        for limit in [0, 6] {
+            let result =
+                collect_request_body(Full::new(bytes::Bytes::from_static(b"abcdef")), limit)
+                    .await
+                    .unwrap();
+            assert_eq!(result.as_ref(), b"abcdef");
+        }
+    }
 
     // ===========================================
     // url_decode tests
