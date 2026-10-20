@@ -180,12 +180,38 @@ fn joined_header_values(headers: &hyper::HeaderMap, name: &str) -> Option<String
 }
 
 /// Returns the value of a Forwarded parameter in one element.
-/// Parameter names are case-insensitive (RFC 7239, section 4).
+///
+/// Parameter names are case-insensitive (RFC 7239, section 4). Fails closed:
+/// returns `None` if any parameter of the element is malformed (no `=`, empty
+/// name, unbalanced or embedded quotes) or if `name` appears more than once,
+/// so an ambiguous element can never yield an identity.
 fn forwarded_param<'a>(element: &'a str, name: &str) -> Option<&'a str> {
-    element.split(';').find_map(|param| {
-        let (key, value) = param.trim().split_once('=')?;
-        key.trim().eq_ignore_ascii_case(name).then_some(value)
-    })
+    let mut found = None;
+    for param in element.split(';').map(str::trim).filter(|p| !p.is_empty()) {
+        let (key, value) = param.split_once('=')?;
+        let (key, value) = (key.trim(), value.trim());
+        if key.is_empty() || !is_valid_forwarded_value(value) {
+            return None;
+        }
+        if key.eq_ignore_ascii_case(name) {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(value);
+        }
+    }
+    found
+}
+
+/// A Forwarded value is either a token-like string without quotes or a single
+/// quoted string with no quote or backslash inside it.
+fn is_valid_forwarded_value(value: &str) -> bool {
+    match value.strip_prefix('"') {
+        Some(rest) => rest
+            .strip_suffix('"')
+            .is_some_and(|inner| !inner.contains(['"', '\\'])),
+        None => !value.is_empty() && !value.contains(['"', '\\']),
+    }
 }
 
 /// Last element of a Forwarded header: the one added by the closest proxy.
@@ -243,12 +269,20 @@ fn extract_client_ip_from_forwarded(forwarded: &str) -> Option<String> {
 }
 
 /// Extract IP address from RFC 7239 node identifier
-/// Handles formats: IP, "IP:port", "[IPv6]", "[IPv6]:port", quoted values
+/// Handles formats: IP, "IP:port", "[IPv6]", "[IPv6]:port", quoted values.
+/// The whole value must parse: a port must be a valid u16 or an obfuscated
+/// `_token`, and nothing may follow the address or port.
 fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
     let value = value.trim();
 
-    // Remove surrounding quotes if present (RFC 7239 allows quoted strings)
-    let value = value.trim_matches('"');
+    // Remove one pair of surrounding quotes (RFC 7239 allows quoted strings)
+    let value = match value.strip_prefix('"') {
+        Some(rest) => rest.strip_suffix('"')?,
+        None => value,
+    };
+    if value.contains('"') {
+        return None;
+    }
 
     // Skip special tokens
     if value.eq_ignore_ascii_case("unknown") || value.starts_with('_') {
@@ -256,25 +290,50 @@ fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
     }
 
     // Handle bracketed IPv6 addresses: [IPv6] or [IPv6]:port
-    if value.starts_with('[') {
-        return value
-            .find(']')
-            .and_then(|bracket_end| parse_canonical_ip(&value[1..bracket_end]));
+    if let Some(rest) = value.strip_prefix('[') {
+        let (ip, after) = rest.split_once(']')?;
+        if !after.is_empty() && !after.strip_prefix(':').is_some_and(is_valid_node_port) {
+            return None;
+        }
+        return ip
+            .parse::<std::net::Ipv6Addr>()
+            .ok()
+            .and_then(|_| parse_canonical_ip(ip));
     }
 
     // Handle IPv4 with optional port: IP or IP:port
     // Count colons to distinguish IPv4:port from IPv6
-    let colon_count = value.chars().filter(|&c| c == ':').count();
-
-    if colon_count == 1 {
+    if value.matches(':').count() == 1 {
         // IPv4 with port: "192.168.1.1:8080"
-        return value
-            .find(':')
-            .and_then(|colon_pos| parse_canonical_ip(&value[..colon_pos]));
+        let (ip, port) = value.split_once(':')?;
+        if !is_valid_node_port(port) {
+            return None;
+        }
+        return ip
+            .parse::<std::net::Ipv4Addr>()
+            .ok()
+            .and_then(|_| parse_canonical_ip(ip));
     }
 
     // Plain IPv4 or unbracketed IPv6
     parse_canonical_ip(value)
+}
+
+/// RFC 7239 node-port: a decimal port number or an obfuscated `_token`.
+fn is_valid_node_port(port: &str) -> bool {
+    match port.strip_prefix('_') {
+        Some(obfuscated) => {
+            !obfuscated.is_empty()
+                && obfuscated
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+        }
+        None => {
+            port.len() <= 5
+                && port.bytes().all(|b| b.is_ascii_digit())
+                && port.parse::<u16>().is_ok()
+        }
+    }
 }
 
 /// Parses an IP address and returns its canonical string form.
@@ -903,6 +962,51 @@ mod tests {
 
         let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_rejects_ambiguous_elements() {
+        // Separators hidden in a quoted extension, duplicated parameters and
+        // malformed node identifiers must fail closed, never yield a client IP.
+        let config = TestConfig::strict(vec![PROXY]);
+        for value in [
+            "for=198.51.100.7;by=10.0.0.1;ext=\"x;for=203.0.113.66\"",
+            "for=198.51.100.7;by=10.0.0.1;ext=\"x,for=203.0.113.66;by=10.0.0.1\"",
+            "for=198.51.100.7;for=203.0.113.66;by=10.0.0.1",
+            "for=198.51.100.7;by=10.0.0.1;by=10.0.0.1",
+            "for=\"198.51.100.7;by=10.0.0.1",
+            "for=198.51.100.7:garbage;by=10.0.0.1",
+            "for=198.51.100.7:65536;by=10.0.0.1",
+            "for=\"[2001:db8::1]garbage\";by=10.0.0.1",
+            "for=\"[198.51.100.7]\";by=10.0.0.1",
+            "for=198.51.100.7;by=10.0.0.1;novalue",
+        ] {
+            let headers = headers_from(&[("forwarded", value)]);
+            assert_eq!(
+                extract_and_validate_real_ip(&headers, peer(PROXY), &config),
+                None,
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_ip_from_node_identifier_ports() {
+        assert_eq!(
+            extract_ip_from_node_identifier("\"192.0.2.1:65535\""),
+            Some("192.0.2.1".to_string())
+        );
+        assert_eq!(
+            extract_ip_from_node_identifier("\"192.0.2.1:_proxy-1\""),
+            Some("192.0.2.1".to_string())
+        );
+        assert_eq!(
+            extract_ip_from_node_identifier("\"[2001:db8::1]:_x\""),
+            Some("2001:db8::1".to_string())
+        );
+        assert_eq!(extract_ip_from_node_identifier("\"192.0.2.1:\""), None);
+        assert_eq!(extract_ip_from_node_identifier("\"192.0.2.1:_\""), None);
+        assert_eq!(extract_ip_from_node_identifier("\"\"192.0.2.1\"\""), None);
     }
 
     #[test]
