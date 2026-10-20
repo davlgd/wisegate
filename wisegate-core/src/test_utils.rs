@@ -22,6 +22,7 @@ pub struct TestConfig {
     pub cleanup: RateLimitCleanupConfig,
     pub proxy: ProxyConfig,
     pub allowed_proxy_ips: Option<Vec<String>>,
+    pub trust_loopback_proxy: bool,
     pub blocked_ips: Vec<String>,
     pub blocked_methods: Vec<String>,
     pub blocked_patterns: Vec<String>,
@@ -47,6 +48,7 @@ impl Default for TestConfig {
                 max_body_size: defaults::MAX_BODY_SIZE,
             },
             allowed_proxy_ips: None,
+            trust_loopback_proxy: false,
             blocked_ips: vec![],
             blocked_methods: vec![],
             blocked_patterns: vec![],
@@ -122,6 +124,10 @@ impl ProxyProvider for TestConfig {
 
     fn allowed_proxy_ips(&self) -> Option<&[String]> {
         self.allowed_proxy_ips.as_deref()
+    }
+
+    fn trust_loopback_proxy(&self) -> bool {
+        self.trust_loopback_proxy
     }
 }
 

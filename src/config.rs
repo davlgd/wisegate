@@ -57,6 +57,8 @@ static AUTH_CREDENTIALS: LazyLock<Credentials> = LazyLock::new(compute_auth_cred
 static AUTH_REALM: LazyLock<String> = LazyLock::new(compute_auth_realm);
 static BEARER_TOKEN: LazyLock<Option<String>> = LazyLock::new(compute_bearer_token);
 static FORWARD_AUTH_HEADER: LazyLock<bool> = LazyLock::new(compute_forward_auth_header);
+static TRUST_LOOPBACK_PROXY: LazyLock<bool> =
+    LazyLock::new(|| compute_trust_loopback_proxy_internal(|key| env::var(key)));
 
 /// Whitelisted environment variable names for proxy IPs.
 ///
@@ -602,8 +604,26 @@ fn compute_forward_auth_header_internal<F>(env_var: F) -> bool
 where
     F: Fn(&str) -> Result<String, std::env::VarError>,
 {
-    env_var(env_vars::CC_FORWARD_AUTH_HEADER)
-        .ok()
+    parse_bool_flag(env_var(env_vars::CC_FORWARD_AUTH_HEADER).ok())
+}
+
+/// Returns whether a loopback TCP peer counts as a trusted proxy in strict mode.
+///
+/// Default: `false`. Accepts `1`, `true`, `yes`, `on` (case-insensitive)
+/// in `TRUST_LOOPBACK_PROXY` to enable.
+pub fn get_trust_loopback_proxy() -> bool {
+    *TRUST_LOOPBACK_PROXY
+}
+
+fn compute_trust_loopback_proxy_internal<F>(env_var: F) -> bool
+where
+    F: Fn(&str) -> Result<String, std::env::VarError>,
+{
+    parse_bool_flag(env_var(env_vars::TRUST_LOOPBACK_PROXY).ok())
+}
+
+fn parse_bool_flag(value: Option<String>) -> bool {
+    value
         .map(|s| {
             let v = s.trim().to_ascii_lowercase();
             matches!(v.as_str(), "1" | "true" | "yes" | "on")
@@ -674,6 +694,10 @@ impl ProxyProvider for EnvVarConfig {
 
     fn allowed_proxy_ips(&self) -> Option<&[String]> {
         get_allowed_proxy_ips().map(|v| v.as_slice())
+    }
+
+    fn trust_loopback_proxy(&self) -> bool {
+        get_trust_loopback_proxy()
     }
 }
 
@@ -1009,6 +1033,36 @@ mod tests {
             assert!(
                 !forward_auth_header_with(Some(v)),
                 "expected `{v}` to be falsy"
+            );
+        }
+    }
+
+    // ===========================================
+    // compute_trust_loopback_proxy tests
+    // ===========================================
+
+    fn trust_loopback_proxy_with(value: Option<&str>) -> bool {
+        let mut vars = HashMap::new();
+        if let Some(v) = value {
+            vars.insert(env_vars::TRUST_LOOPBACK_PROXY, v);
+        }
+        compute_trust_loopback_proxy_internal(create_mock_env(vars))
+    }
+
+    #[test]
+    fn test_trust_loopback_proxy_default_false_when_unset() {
+        assert!(!trust_loopback_proxy_with(None));
+    }
+
+    #[test]
+    fn test_trust_loopback_proxy_values() {
+        for v in ["1", "true", "YES", " on "] {
+            assert!(trust_loopback_proxy_with(Some(v)), "`{v}` should enable");
+        }
+        for v in ["", "0", "false", "off", "loopback"] {
+            assert!(
+                !trust_loopback_proxy_with(Some(v)),
+                "`{v}` should not enable"
             );
         }
     }

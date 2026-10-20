@@ -45,6 +45,8 @@ pub struct DefaultConfig {
     pub proxy: ProxyConfig,
     /// Trusted proxy IPs. `Some` activates strict mode; `None` is permissive.
     pub allowed_proxy_ips: Option<Vec<String>>,
+    /// Treat a loopback TCP peer as a trusted proxy in strict mode.
+    pub trust_loopback_proxy: bool,
     /// Client IPs that should be rejected with 403.
     pub blocked_ips: Vec<String>,
     /// HTTP methods that should be rejected with 405.
@@ -79,6 +81,7 @@ impl Default for DefaultConfig {
                 max_body_size: defaults::MAX_BODY_SIZE,
             },
             allowed_proxy_ips: None,
+            trust_loopback_proxy: false,
             blocked_ips: Vec::new(),
             blocked_methods: Vec::new(),
             blocked_patterns: Vec::new(),
@@ -106,6 +109,9 @@ impl ProxyProvider for DefaultConfig {
     }
     fn allowed_proxy_ips(&self) -> Option<&[String]> {
         self.allowed_proxy_ips.as_deref()
+    }
+    fn trust_loopback_proxy(&self) -> bool {
+        self.trust_loopback_proxy
     }
 }
 
@@ -164,6 +170,7 @@ mod tests {
         );
         assert_eq!(config.max_connections, defaults::MAX_CONNECTIONS);
         assert!(config.allowed_proxy_ips.is_none());
+        assert!(!config.trust_loopback_proxy);
         assert!(!config.forward_authorization_header);
     }
 }

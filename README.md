@@ -51,6 +51,7 @@ All configuration via environment variables:
 |----------|---------|-------------|
 | `CC_REVERSE_PROXY_IPS` | - | Trusted proxy IPs (enables strict mode) |
 | `TRUSTED_PROXY_IPS_VAR` | - | Alternative variable name for proxy IPs (whitelisted: `TRUSTED_PROXY_IPS`, `REVERSE_PROXY_IPS`, `PROXY_ALLOWLIST`, `ALLOWED_PROXY_IPS`, `PROXY_IPS`) |
+| `TRUST_LOOPBACK_PROXY` | `false` | In strict mode, also trust a loopback TCP peer (another local middleware in front of WiseGate, e.g. a Clever Cloud Request Flow chain) |
 | `BLOCKED_IPS` | - | Blocked client IPs |
 | `BLOCKED_METHODS` | - | Blocked HTTP methods (returns 405) |
 | `BLOCKED_PATTERNS` | - | Blocked URL patterns (returns 404) |
@@ -83,10 +84,13 @@ wisegate -l 8080 -f 9000
 
 ### Strict Mode (CC_REVERSE_PROXY_IPS set)
 
-- ✅ Validates `x-forwarded-for` and `forwarded` headers
-- ✅ Authenticates proxy IPs against allowlist
+- ✅ Requires the TCP peer to be an allowlisted proxy (or a local middleware with `TRUST_LOOPBACK_PROXY`)
+- ✅ Reads only the last `Forwarded` element, the one appended by that proxy: its `by=` must be allowlisted, its `for=` is the client IP
+- ✅ Ignores `X-Forwarded-For` and any element a client added before the proxy's own
 - ✅ Full IP filtering and rate limiting
 - ✅ Injects `X-Real-IP` header
+
+Requests that fail these checks are rejected with `400 Bad Request`. The trusted proxy must append a `Forwarded` element with both `for=` and `by=` (as Sōzu does on Clever Cloud).
 
 ### Permissive Mode (no proxy IPs)
 

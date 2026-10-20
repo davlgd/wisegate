@@ -147,6 +147,18 @@ pub const CC_BEARER_TOKEN: &str = "CC_BEARER_TOKEN";
 /// **Example**: `"true"`
 pub const CC_FORWARD_AUTH_HEADER: &str = "CC_FORWARD_AUTH_HEADER";
 
+/// Treat a loopback TCP peer as a trusted proxy in strict mode.
+///
+/// Default: `false`. In strict mode, wisegate only trusts the `Forwarded`
+/// header when the TCP peer is in the proxy allowlist. Enable this when
+/// another local middleware runs in front of wisegate (e.g. a Clever Cloud
+/// Request Flow chain such as `varnish,custom`) and passes the load
+/// balancer's `Forwarded` header through unchanged.
+/// Accepts `1`, `true`, `yes`, `on` (case-insensitive) to enable.
+///
+/// **Example**: `"true"`
+pub const TRUST_LOOPBACK_PROXY: &str = "TRUST_LOOPBACK_PROXY";
+
 // ============================================================================
 // Proxy Behavior Configuration
 // ============================================================================
@@ -199,6 +211,7 @@ pub fn all_env_vars() -> &'static [&'static str] {
     &[
         ALLOWED_PROXY_IPS,
         TRUSTED_PROXY_IPS_VAR,
+        TRUST_LOOPBACK_PROXY,
         BLOCKED_IPS,
         BLOCKED_METHODS,
         BLOCKED_PATTERNS,

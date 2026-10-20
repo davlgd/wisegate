@@ -35,6 +35,17 @@ pub trait ProxyProvider: Send + Sync {
     /// Returns the list of allowed proxy IPs, if configured.
     /// When `Some`, strict mode is enabled. When `None`, permissive mode is used.
     fn allowed_proxy_ips(&self) -> Option<&[String]>;
+
+    /// Whether a loopback TCP peer counts as a trusted proxy in strict mode.
+    ///
+    /// Default: `false`. Enable it only when another local middleware sits
+    /// between the allowlisted proxy and wisegate (e.g. a Clever Cloud
+    /// Request Flow chain) and passes the proxy's `Forwarded` header through
+    /// unchanged. The `by=` of the last `Forwarded` element must still be in
+    /// the allowlist.
+    fn trust_loopback_proxy(&self) -> bool {
+        false
+    }
 }
 
 /// Configuration for request filtering.

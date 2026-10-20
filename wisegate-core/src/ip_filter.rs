@@ -11,9 +11,9 @@
 //! WiseGate operates in two modes:
 //!
 //! ## Strict Mode (proxy allowlist configured)
-//! - Requires both `x-forwarded-for` and `forwarded` headers
-//! - Validates proxy IP from `by=` field against allowlist
-//! - Extracts client IP from header chain
+//! - Requires the TCP peer to be an allowlisted proxy
+//! - Reads the last `forwarded` element, the one that proxy appended
+//! - Validates its `by=` against the allowlist and takes the client IP from its `for=`
 //!
 //! ## Permissive Mode (no proxy allowlist)
 //! - Attempts to extract client IP from available headers
@@ -32,12 +32,14 @@
 //! use hyper::HeaderMap;
 //!
 //! let headers = HeaderMap::new();
-//! if let Some(client_ip) = ip_filter::extract_and_validate_real_ip(&headers, &config) {
+//! if let Some(client_ip) = ip_filter::extract_and_validate_real_ip(&headers, peer_ip, &config) {
 //!     if ip_filter::is_ip_blocked(&client_ip, &config) {
 //!         // Reject request
 //!     }
 //! }
 //! ```
+
+use std::net::IpAddr;
 
 use crate::headers;
 use crate::types::ConfigProvider;
@@ -82,9 +84,14 @@ fn ips_match(a: &str, b: &str) -> bool {
 /// This function implements WiseGate's security model:
 ///
 /// 1. **Strict mode** (proxy allowlist configured):
-///    - Requires both `x-forwarded-for` and `forwarded` headers
-///    - Validates proxy IP from `by=` field against allowlist
-///    - Extracts client IP from the last entry in `x-forwarded-for`
+///    - The TCP peer (`peer_ip`) must be in the allowlist, or be a loopback
+///      address when [`crate::ProxyProvider::trust_loopback_proxy`] is enabled
+///    - Only the last element of the `forwarded` header is used: it is the one
+///      appended by the trusted proxy. Its `by=` must be in the allowlist and
+///      its `for=` is the client IP. No fallback to earlier elements.
+///    - All `forwarded` header fields are read, in order, so a client cannot
+///      hide the proxy's element behind a field of its own
+///    - `x-forwarded-for` is not used
 ///
 /// 2. **Permissive mode** (no proxy allowlist):
 ///    - Attempts to extract client IP from available headers
@@ -93,6 +100,7 @@ fn ips_match(a: &str, b: &str) -> bool {
 /// # Arguments
 ///
 /// * `headers` - HTTP request headers
+/// * `peer_ip` - IP address of the TCP peer that sent the request
 /// * `config` - Configuration provider for allowed proxy IPs
 ///
 /// # Returns
@@ -105,68 +113,99 @@ fn ips_match(a: &str, b: &str) -> bool {
 /// ```ignore
 /// use wisegate_core::ip_filter::extract_and_validate_real_ip;
 ///
-/// let client_ip = extract_and_validate_real_ip(&request.headers(), &config);
+/// let client_ip = extract_and_validate_real_ip(&request.headers(), peer_addr.ip(), &config);
 /// ```
 pub fn extract_and_validate_real_ip(
     headers: &hyper::HeaderMap,
+    peer_ip: IpAddr,
     config: &impl ConfigProvider,
 ) -> Option<String> {
-    let allowed_proxy_ips = config.allowed_proxy_ips();
-    let has_proxy_allowlist = allowed_proxy_ips.is_some();
-
-    if has_proxy_allowlist {
-        // Strict mode: require both headers and validate proxy IP
-        let xff = headers.get(headers::X_FORWARDED_FOR)?.to_str().ok()?;
-        let forwarded = headers.get(headers::FORWARDED)?.to_str().ok()?;
-        let proxy_ip = extract_proxy_ip_from_forwarded(forwarded)?;
-
-        if !is_proxy_ip_allowed(&proxy_ip, allowed_proxy_ips) {
-            return None;
-        }
-
-        extract_client_ip_from_xff(xff)
-    } else {
-        // Permissive mode: try to extract client IP from available headers
-        if let Some(xff) = headers
-            .get(headers::X_FORWARDED_FOR)
-            .and_then(|h| h.to_str().ok())
-        {
-            // If we have x-forwarded-for, try to extract client IP from it
-            if let Some(client_ip) = extract_client_ip_from_xff(xff) {
-                return Some(client_ip);
-            }
-        }
-
-        if let Some(forwarded) = headers
-            .get(headers::FORWARDED)
-            .and_then(|h| h.to_str().ok())
-        {
-            // If we have forwarded header, try to extract client IP
-            if let Some(client_ip) = extract_client_ip_from_forwarded(forwarded) {
-                return Some(client_ip);
-            }
-        }
-
-        // If no headers are available or contain valid IPs, we'll return None
-        // This will cause the request handler to use a default behavior
-        None
+    match config.allowed_proxy_ips() {
+        Some(allowed_proxy_ips) => extract_from_trusted_proxy(
+            headers,
+            peer_ip,
+            allowed_proxy_ips,
+            config.trust_loopback_proxy(),
+        ),
+        None => extract_permissive(headers),
     }
+}
+
+/// Strict mode: trust only what the allowlisted proxy appended itself.
+fn extract_from_trusted_proxy(
+    headers: &hyper::HeaderMap,
+    peer_ip: IpAddr,
+    allowed_proxy_ips: &[String],
+    trust_loopback_proxy: bool,
+) -> Option<String> {
+    let peer_ip = peer_ip.to_canonical();
+    let peer_trusted = (trust_loopback_proxy && peer_ip.is_loopback())
+        || is_proxy_ip_allowed(&peer_ip.to_string(), Some(allowed_proxy_ips));
+    if !peer_trusted {
+        return None;
+    }
+
+    let forwarded = joined_header_values(headers, headers::FORWARDED)?;
+    let proxy_ip = extract_proxy_ip_from_forwarded(&forwarded)?;
+    if !is_proxy_ip_allowed(&proxy_ip, Some(allowed_proxy_ips)) {
+        return None;
+    }
+
+    extract_client_ip_from_last_forwarded(&forwarded)
+}
+
+/// Permissive mode: best-effort extraction from client-controlled headers.
+fn extract_permissive(headers: &hyper::HeaderMap) -> Option<String> {
+    if let Some(xff) = joined_header_values(headers, headers::X_FORWARDED_FOR)
+        && let Some(client_ip) = extract_client_ip_from_xff(&xff)
+    {
+        return Some(client_ip);
+    }
+
+    joined_header_values(headers, headers::FORWARDED)
+        .and_then(|forwarded| extract_client_ip_from_forwarded(&forwarded))
+}
+
+/// Joins every field of a header with `,`, in order, as RFC 9110 allows for
+/// list-based fields. Proxies such as Sōzu append to the last field only, so
+/// reading just the first one would return a client-controlled value.
+/// Returns `None` if the header is absent or a field is not visible ASCII.
+fn joined_header_values(headers: &hyper::HeaderMap, name: &str) -> Option<String> {
+    let mut values = headers.get_all(name).iter().peekable();
+    values.peek()?;
+    values
+        .map(|value| value.to_str().ok())
+        .collect::<Option<Vec<_>>>()
+        .map(|fields| fields.join(","))
+}
+
+/// Returns the value of a Forwarded parameter in one element.
+/// Parameter names are case-insensitive (RFC 7239, section 4).
+fn forwarded_param<'a>(element: &'a str, name: &str) -> Option<&'a str> {
+    element.split(';').find_map(|param| {
+        let (key, value) = param.trim().split_once('=')?;
+        key.trim().eq_ignore_ascii_case(name).then_some(value)
+    })
+}
+
+/// Last element of a Forwarded header: the one added by the closest proxy.
+fn last_forwarded_element(forwarded: &str) -> &str {
+    forwarded.rsplit(',').next().unwrap_or(forwarded)
 }
 
 /// Extract proxy IP from forwarded header 'by=' field (RFC 7239 compliant)
 /// Format: Forwarded: for=client;by=proxy, for=client2;by=proxy2
 /// Elements are separated by ',' and parameters within an element by ';'
 fn extract_proxy_ip_from_forwarded(forwarded: &str) -> Option<String> {
-    // RFC 7239: elements separated by ',', parameters by ';'
     // We want the 'by=' parameter from the last element (closest proxy)
-    forwarded
-        .split(',')
-        .next_back()
-        .and_then(|element| {
-            element
-                .split(';')
-                .find_map(|param| param.trim().strip_prefix("by="))
-        })
+    forwarded_param(last_forwarded_element(forwarded), "by")
+        .and_then(extract_ip_from_node_identifier)
+}
+
+/// Extract client IP from the 'for=' field of the last Forwarded element,
+/// the one written by the closest proxy alongside its own 'by='.
+fn extract_client_ip_from_last_forwarded(forwarded: &str) -> Option<String> {
+    forwarded_param(last_forwarded_element(forwarded), "for")
         .and_then(extract_ip_from_node_identifier)
 }
 
@@ -195,16 +234,11 @@ fn extract_client_ip_from_xff(xff: &str) -> Option<String> {
 /// Format: Forwarded: for=client;by=proxy, for=client2;by=proxy2
 /// Handles node identifiers: IP, "IP:port", "[IPv6]", "[IPv6]:port", "unknown", "secret"
 fn extract_client_ip_from_forwarded(forwarded: &str) -> Option<String> {
-    // RFC 7239: elements separated by ',', parameters by ';'
     // We want the 'for=' parameter from the first element (original client)
     forwarded
         .split(',')
         .next()
-        .and_then(|element| {
-            element
-                .split(';')
-                .find_map(|param| param.trim().strip_prefix("for="))
-        })
+        .and_then(|element| forwarded_param(element, "for"))
         .and_then(extract_ip_from_node_identifier)
 }
 
@@ -247,11 +281,10 @@ fn extract_ip_from_node_identifier(value: &str) -> Option<String> {
 ///
 /// Two equivalent IPv6 representations (e.g. `2001:db8::1` and
 /// `2001:0db8:0000:0000:0000:0000:0000:0001`) produce the same canonical
-/// string (RFC 5952), which prevents bypassing per-IP rate limiting by
-/// alternating address formats.
+/// string (RFC 5952), and IPv4-mapped IPv6 addresses (`::ffff:192.0.2.1`)
+/// collapse to their IPv4 form. This prevents bypassing per-IP rate limiting
+/// or blocklists by alternating address formats.
 fn parse_canonical_ip(ip: &str) -> Option<String> {
-    use std::net::IpAddr;
-
     if ip.is_empty() {
         return None;
     }
@@ -259,7 +292,10 @@ fn parse_canonical_ip(ip: &str) -> Option<String> {
     // Handle bracketed IPv6 addresses (e.g., [::1])
     let ip_to_parse = ip.trim_start_matches('[').trim_end_matches(']');
 
-    ip_to_parse.parse::<IpAddr>().ok().map(|a| a.to_string())
+    ip_to_parse
+        .parse::<IpAddr>()
+        .ok()
+        .map(|a| a.to_canonical().to_string())
 }
 
 #[cfg(test)]
@@ -639,35 +675,60 @@ mod tests {
     // extract_and_validate_real_ip tests (integration)
     // ===========================================
 
+    const PROXY: &str = "10.0.0.1";
+
+    fn peer(ip: &str) -> IpAddr {
+        ip.parse().unwrap()
+    }
+
+    fn headers_from(fields: &[(&'static str, &str)]) -> hyper::HeaderMap {
+        let mut headers = hyper::HeaderMap::new();
+        for (name, value) in fields {
+            headers.append(*name, value.parse().unwrap());
+        }
+        headers
+    }
+
     #[test]
     fn test_extract_and_validate_real_ip_permissive_with_xff() {
         let config = TestConfig::permissive();
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
+        let headers = headers_from(&[("x-forwarded-for", "192.168.1.100")]);
 
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer("203.0.113.1"), &config);
         assert_eq!(result, Some("192.168.1.100".to_string()));
     }
 
     #[test]
     fn test_extract_and_validate_real_ip_permissive_with_forwarded() {
         let config = TestConfig::permissive();
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert("forwarded", "for=192.168.1.100".parse().unwrap());
+        let headers = headers_from(&[("forwarded", "for=192.168.1.100")]);
 
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer("203.0.113.1"), &config);
         assert_eq!(result, Some("192.168.1.100".to_string()));
     }
 
     #[test]
     fn test_extract_and_validate_real_ip_permissive_xff_priority() {
         let config = TestConfig::permissive();
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
-        headers.insert("forwarded", "for=10.0.0.1".parse().unwrap());
+        let headers = headers_from(&[
+            ("x-forwarded-for", "192.168.1.100"),
+            ("forwarded", "for=10.0.0.1"),
+        ]);
 
         // XFF should be checked first
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer("203.0.113.1"), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_permissive_reads_every_xff_field() {
+        let config = TestConfig::permissive();
+        let headers = headers_from(&[
+            ("x-forwarded-for", "198.51.100.7"),
+            ("x-forwarded-for", "198.51.100.8, 192.168.1.100"),
+        ]);
+
+        let result = extract_and_validate_real_ip(&headers, peer("203.0.113.1"), &config);
         assert_eq!(result, Some("192.168.1.100".to_string()));
     }
 
@@ -676,60 +737,188 @@ mod tests {
         let config = TestConfig::permissive();
         let headers = hyper::HeaderMap::new();
 
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer("203.0.113.1"), &config);
         assert_eq!(result, None);
     }
 
     #[test]
     fn test_extract_and_validate_real_ip_strict_valid() {
-        let config = TestConfig::strict(vec!["10.0.0.1"]);
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
-        headers.insert(
-            "forwarded",
-            "for=192.168.1.100;by=10.0.0.1".parse().unwrap(),
-        );
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[("forwarded", "for=192.168.1.100;by=10.0.0.1")]);
 
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_sozu_format() {
+        // Header as appended by Sōzu on Clever Cloud: quoted for= with port
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[(
+            "forwarded",
+            "proto=https;for=\"192.168.1.100:57676\";by=10.0.0.1",
+        )]);
+
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_param_names_case_insensitive() {
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[("forwarded", "For=192.168.1.100;BY=10.0.0.1")]);
+
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
         assert_eq!(result, Some("192.168.1.100".to_string()));
     }
 
     #[test]
     fn test_extract_and_validate_real_ip_strict_proxy_not_allowed() {
-        let config = TestConfig::strict(vec!["10.0.0.1"]);
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
-        headers.insert(
-            "forwarded",
-            "for=192.168.1.100;by=10.0.0.2".parse().unwrap(),
-        ); // Wrong proxy
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[("forwarded", "for=192.168.1.100;by=10.0.0.2")]);
 
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
         assert_eq!(result, None);
     }
 
     #[test]
-    fn test_extract_and_validate_real_ip_strict_missing_xff() {
-        let config = TestConfig::strict(vec!["10.0.0.1"]);
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert(
-            "forwarded",
-            "for=192.168.1.100;by=10.0.0.1".parse().unwrap(),
-        );
-        // Missing x-forwarded-for
+    fn test_extract_and_validate_real_ip_strict_rejects_untrusted_peer() {
+        // A client reaching wisegate directly forges the proxy's by=
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[
+            ("x-forwarded-for", "198.51.100.7"),
+            ("forwarded", "for=198.51.100.7;by=10.0.0.1"),
+        ]);
 
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer("203.0.113.66"), &config);
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_ipv4_mapped_peer() {
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[("forwarded", "for=192.168.1.100;by=10.0.0.1")]);
+
+        let result = extract_and_validate_real_ip(&headers, peer("::ffff:10.0.0.1"), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_loopback_peer_needs_opt_in() {
+        let mut config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[("forwarded", "for=192.168.1.100;by=10.0.0.1")]);
+
+        assert_eq!(
+            extract_and_validate_real_ip(&headers, peer("127.0.0.1"), &config),
+            None
+        );
+
+        config.trust_loopback_proxy = true;
+        assert_eq!(
+            extract_and_validate_real_ip(&headers, peer("127.0.0.1"), &config),
+            Some("192.168.1.100".to_string())
+        );
+        assert_eq!(
+            extract_and_validate_real_ip(&headers, peer("::1"), &config),
+            Some("192.168.1.100".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_loopback_still_checks_by() {
+        let mut config = TestConfig::strict(vec![PROXY]);
+        config.trust_loopback_proxy = true;
+        let headers = headers_from(&[("forwarded", "for=192.168.1.100;by=10.0.0.2")]);
+
+        let result = extract_and_validate_real_ip(&headers, peer("127.0.0.1"), &config);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_ignores_xff() {
+        // The client IP comes from the proxy's Forwarded element, never XFF
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[
+            ("x-forwarded-for", "198.51.100.7"),
+            ("forwarded", "for=192.168.1.100;by=10.0.0.1"),
+        ]);
+
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_duplicate_forwarded_fields() {
+        // Sōzu appends to the last field; a client-supplied first field
+        // carrying an allowlisted by= must not be picked up.
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[
+            ("forwarded", "for=198.51.100.9;by=10.0.0.1"),
+            (
+                "forwarded",
+                "for=198.51.100.10, for=192.168.1.100;by=10.0.0.1",
+            ),
+        ]);
+
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_client_prefix_ignored() {
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[(
+            "forwarded",
+            "for=198.51.100.9;by=10.0.0.1, for=192.168.1.100;by=10.0.0.1",
+        )]);
+
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
+        assert_eq!(result, Some("192.168.1.100".to_string()));
+    }
+
+    #[test]
+    fn test_extract_and_validate_real_ip_strict_no_fallback_on_invalid_for() {
+        // An unusable for= in the proxy's element must not fall back to an
+        // earlier, client-controlled element.
+        let config = TestConfig::strict(vec![PROXY]);
+        for last in [
+            "for=unknown;by=10.0.0.1",
+            "for=_hidden;by=10.0.0.1",
+            "by=10.0.0.1",
+        ] {
+            let value = format!("for=198.51.100.9;by=10.0.0.1, {last}");
+            let headers = headers_from(&[("forwarded", value.as_str())]);
+            assert_eq!(
+                extract_and_validate_real_ip(&headers, peer(PROXY), &config),
+                None,
+                "{value}"
+            );
+        }
     }
 
     #[test]
     fn test_extract_and_validate_real_ip_strict_missing_forwarded() {
-        let config = TestConfig::strict(vec!["10.0.0.1"]);
-        let mut headers = hyper::HeaderMap::new();
-        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
-        // Missing forwarded
+        let config = TestConfig::strict(vec![PROXY]);
+        let headers = headers_from(&[("x-forwarded-for", "192.168.1.100")]);
 
-        let result = extract_and_validate_real_ip(&headers, &config);
+        let result = extract_and_validate_real_ip(&headers, peer(PROXY), &config);
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_parse_canonical_ip_collapses_ipv4_mapped() {
+        assert_eq!(
+            parse_canonical_ip("::ffff:192.0.2.1"),
+            Some("192.0.2.1".to_string())
+        );
+    }
+
+    #[test]
+    fn test_is_ip_blocked_matches_ipv4_mapped_form() {
+        let config = TestConfig {
+            blocked_ips: vec!["192.0.2.1".to_string()],
+            ..TestConfig::permissive()
+        };
+        assert!(is_ip_blocked("::ffff:192.0.2.1", &config));
     }
 }

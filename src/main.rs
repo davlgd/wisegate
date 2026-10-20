@@ -157,7 +157,7 @@ async fn main() {
                     let _conn_guard = tracker.track();
 
                     let service = service_fn(move |req| {
-                        request_handler::handle_request(req, forward_host.clone(), forward_port, limiter.clone(), config.clone(), client.clone())
+                        request_handler::handle_request(req, addr, forward_host.clone(), forward_port, limiter.clone(), config.clone(), client.clone())
                     });
 
                     if let Err(err) = http1::Builder::new().serve_connection(io, service).await {

@@ -21,6 +21,7 @@
 use http_body_util::{BodyExt, Full};
 use hyper::{Request, Response, StatusCode, body::Incoming};
 use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::error::WiseGateError;
@@ -40,6 +41,7 @@ use crate::{auth, headers, ip_filter, rate_limiter};
 /// # Arguments
 ///
 /// * `req` - The incoming HTTP request
+/// * `peer_addr` - Address of the TCP peer that sent the request
 /// * `forward_host` - The upstream host to forward requests to
 /// * `forward_port` - The upstream port to forward requests to
 /// * `limiter` - The shared rate limiter instance
@@ -59,11 +61,12 @@ use crate::{auth, headers, ip_filter, rate_limiter};
 ///
 /// # Security
 ///
-/// * **Strict mode** (proxy allowlist configured): both `X-Forwarded-For`
-///   and `Forwarded` headers must be present. The proxy IP is taken from the
-///   `Forwarded` header's `by=` field and matched against the allowlist; the
-///   client IP is taken from the last entry of `X-Forwarded-For`. Requests
-///   missing either header, or whose proxy is not in the allowlist, are
+/// * **Strict mode** (proxy allowlist configured): the TCP peer must be in
+///   the allowlist (or be a loopback address when
+///   [`crate::ProxyProvider::trust_loopback_proxy`] is enabled). Only the last
+///   element of the `Forwarded` header, the one that proxy appended, is used:
+///   its `by=` must be in the allowlist and its `for=` is the client IP.
+///   `X-Forwarded-For` is ignored. Requests failing any of these checks are
 ///   rejected with `400 Bad Request`.
 /// * **Permissive mode** (no allowlist): if a request supplies an
 ///   `X-Forwarded-For` or `Forwarded` header, the parsed IP is trusted as the
@@ -77,6 +80,7 @@ use crate::{auth, headers, ip_filter, rate_limiter};
 ///   [`crate::AuthenticationProvider::forward_authorization_header`]).
 pub async fn handle_request<C: ConfigProvider>(
     req: Request<Incoming>,
+    peer_addr: SocketAddr,
     forward_host: Arc<str>,
     forward_port: u16,
     limiter: RateLimiter,
@@ -84,20 +88,23 @@ pub async fn handle_request<C: ConfigProvider>(
     http_client: reqwest::Client,
 ) -> Result<Response<Full<bytes::Bytes>>, Infallible> {
     // Extract and validate real client IP
-    let real_client_ip: Option<String> =
-        match ip_filter::extract_and_validate_real_ip(req.headers(), config.as_ref()) {
-            Some(ip) => Some(ip),
-            None => {
-                if config.allowed_proxy_ips().is_none() {
-                    // Permissive mode: continue without IP-based security
-                    None
-                } else {
-                    // Strict mode: reject when proxy validation fails
-                    let err = WiseGateError::InvalidIp("missing or invalid proxy headers".into());
-                    return Ok(create_error_response(err.status_code(), err.user_message()));
-                }
+    let real_client_ip: Option<String> = match ip_filter::extract_and_validate_real_ip(
+        req.headers(),
+        peer_addr.ip(),
+        config.as_ref(),
+    ) {
+        Some(ip) => Some(ip),
+        None => {
+            if config.allowed_proxy_ips().is_none() {
+                // Permissive mode: continue without IP-based security
+                None
+            } else {
+                // Strict mode: reject when proxy validation fails
+                let err = WiseGateError::InvalidIp("missing or invalid proxy headers".into());
+                return Ok(create_error_response(err.status_code(), err.user_message()));
             }
-        };
+        }
+    };
 
     // Check if IP is blocked
     if let Some(ref ip) = real_client_ip
