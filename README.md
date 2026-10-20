@@ -106,7 +106,7 @@ Enabled when `CC_REVERSE_PROXY_IPS` is non-empty, or when `TRUSTED_PROXY_IPS_VAR
 - ✅ Requires the TCP peer to be an allowlisted proxy (or a local middleware with `TRUST_LOOPBACK_PROXY`)
 - ✅ Reads only the last `Forwarded` element, the one appended by that proxy: its `by=` must be allowlisted, its `for=` is the client IP
 - ✅ Ignores `X-Forwarded-For` and any element a client added before the proxy's own
-- ✅ Rejects malformed identities in that element (unbalanced quotes, duplicate `for`/`by`, invalid ports): WiseGate parses the subset of RFC 7239 that proxies such as Sōzu emit, and fails closed outside it
+- ✅ Rejects malformed identities in that element (unbalanced quotes, parameter names that are not tokens, duplicate `for`/`by`, invalid ports); complex quoted extensions are not supported
 - ✅ Full IP filtering and rate limiting
 - ✅ Injects `X-Real-IP` header
 

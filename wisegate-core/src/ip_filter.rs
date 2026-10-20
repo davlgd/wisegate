@@ -182,15 +182,15 @@ fn joined_header_values(headers: &hyper::HeaderMap, name: &str) -> Option<String
 /// Returns the value of a Forwarded parameter in one element.
 ///
 /// Parameter names are case-insensitive (RFC 7239, section 4). Fails closed:
-/// returns `None` if any parameter of the element is malformed (no `=`, empty
-/// name, unbalanced or embedded quotes) or if `name` appears more than once,
-/// so an ambiguous element can never yield an identity.
+/// returns `None` if any parameter of the element is malformed (no `=`, a name
+/// that is not an RFC 9110 token, unbalanced or embedded quotes) or if `name`
+/// appears more than once, so an ambiguous element can never yield an identity.
 fn forwarded_param<'a>(element: &'a str, name: &str) -> Option<&'a str> {
     let mut found = None;
     for param in element.split(';').map(str::trim).filter(|p| !p.is_empty()) {
         let (key, value) = param.split_once('=')?;
         let (key, value) = (key.trim(), value.trim());
-        if key.is_empty() || !is_valid_forwarded_value(value) {
+        if !is_token(key) || !is_valid_forwarded_value(value) {
             return None;
         }
         if key.eq_ignore_ascii_case(name) {
@@ -201,6 +201,14 @@ fn forwarded_param<'a>(element: &'a str, name: &str) -> Option<&'a str> {
         }
     }
     found
+}
+
+/// RFC 9110 token: one or more tchar. A quote in a parameter name could
+/// otherwise close a quoted value that the last-comma split cut open.
+fn is_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
 }
 
 /// A Forwarded value is either a token-like string without quotes or a single
@@ -993,6 +1001,8 @@ mod tests {
         for value in [
             "for=198.51.100.7;by=10.0.0.1;ext=\"x;for=203.0.113.66\"",
             "for=198.51.100.7;by=10.0.0.1;ext=\"x,for=203.0.113.66;by=10.0.0.1\"",
+            "for=198.51.100.7;by=10.0.0.1;ext=\"x,for=203.0.113.66;by=10.0.0.1;x\"=ok",
+            "for=198.51.100.7;by=10.0.0.1;b y=1",
             "for=198.51.100.7;for=203.0.113.66;by=10.0.0.1",
             "for=198.51.100.7;by=10.0.0.1;by=10.0.0.1",
             "for=\"198.51.100.7;by=10.0.0.1",
