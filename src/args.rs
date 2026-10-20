@@ -24,6 +24,7 @@ const AFTER_HELP: &str = "Environment variables:
   Proxy security:
     CC_REVERSE_PROXY_IPS               Trusted proxy IPs (enables strict mode)
     TRUSTED_PROXY_IPS_VAR              Alt variable name to read proxy IPs from
+    TRUST_LOOPBACK_PROXY               Also trust a loopback peer  (default: false)
 
   Filtering:
     BLOCKED_IPS                        Comma-separated client IPs to block
